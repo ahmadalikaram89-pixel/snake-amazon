@@ -486,10 +486,10 @@ html,body{position:fixed;width:100%;height:100%;overflow:hidden}
     </div>
 
     <div class="player-bar">
-      <div class="player-avatar">🐍</div>
+      <div class="player-avatar" id="menuAvatar">🐍</div>
       <div class="player-info">
         <div class="player-name">PLAYER</div>
-        <div class="player-rank">🏆 BRONZE SURVIVOR</div>
+        <div class="player-rank" id="menuRank">🥉 BRONZE SURVIVOR</div>
       </div>
       <div class="player-level" id="menuLevel">Lv.1</div>
     </div>
@@ -769,8 +769,11 @@ document.addEventListener('click',unlockAudio,{once:true});
 const WW=3200,WH=3200;
 const SEG_DIST=8;
 const BASE_SPEED=3.2;
-const TOTAL_PLAYERS=8;
+let TOTAL_PLAYERS=8; // scales up with account level, see getDifficultyT()
 const PREY_COUNT=60;
+// 0..1, ramps up with account (meta) level so returning players face a harder game
+let AI_DIFF=0;
+function getDifficultyT(){return Math.min(1,((stats.level||1)-1)/29);}
 
 // Zone config: shrinks every ZONE_INTERVAL ms
 const ZONE_INTERVAL=60000; // 60 seconds per phase
@@ -790,8 +793,28 @@ const SNAKE_COLORS=[
   {h:'#3399ff',d:'#001133'},{h:'#ffcc00',d:'#332200'},
   {h:'#ff6600',d:'#331400'},{h:'#cc44ff',d:'#220033'},
   {h:'#44ffee',d:'#003333'},{h:'#ff44aa',d:'#330022'},
+  {h:'#c8c8d8',d:'#33333c'},{h:'#66eeff',d:'#0e3944'},
+  {h:'#fff2b0',d:'#443c1a'},{h:'#00cc66',d:'#003318'},
 ];
-const AI_NAMES=['Cobra','Mamba','Python','Viper','Krait','Boa','Taipan'];
+const AI_NAMES=['Cobra','Mamba','Python','Viper','Krait','Boa','Taipan','Rattler','Copperhead','Sidewinder','Garter'];
+
+// Account (meta) progression: rank tier scales with lifetime account level,
+// each tier gives the player a distinct snake color so returning players see
+// a visible sign of long-term progress instead of a static number.
+const RANK_TIERS=[
+  {minLv:1, name:'BRONZE SURVIVOR',   emoji:'🥉', colorIdx:4},
+  {minLv:5, name:'SILVER HUNTER',     emoji:'🥈', colorIdx:8},
+  {minLv:10,name:'GOLD PREDATOR',     emoji:'🥇', colorIdx:3},
+  {minLv:16,name:'PLATINUM APEX',     emoji:'💠', colorIdx:9},
+  {minLv:23,name:'DIAMOND TITAN',     emoji:'💎', colorIdx:2},
+  {minLv:31,name:'MASTER SERPENT',    emoji:'👑', colorIdx:5},
+  {minLv:40,name:'LEGENDARY WYRM',    emoji:'🔱', colorIdx:10},
+];
+function getRankTier(lv){
+  let tier=RANK_TIERS[0];
+  for(const t of RANK_TIERS) if(lv>=t.minLv) tier=t;
+  return tier;
+}
 
 // Ability configs
 const ABILITIES={
@@ -855,6 +878,18 @@ const BIOMES=[
 
 // Current biome
 let currentBiome=BIOMES[0];
+// Biome visit order for the current match. Jungle (0) always opens the match,
+// but the remaining 4 biomes are shuffled each game so repeat playthroughs
+// don't always see the exact same jungle->ocean->desert->volcano->space order.
+let biomeOrder=[0,1,2,3,4];
+function shuffleBiomeOrder(){
+  const rest=[1,2,3,4];
+  for(let i=rest.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [rest[i],rest[j]]=[rest[j],rest[i]];
+  }
+  biomeOrder=[0,...rest];
+}
 
 // ═══════════════════════════════════════════
 // SNAKE FORMS (evolve with level)
@@ -1942,9 +1977,10 @@ class Snake{
 
   aiUpdate(now){
     if(!this.alive)return;
-    if(Math.random()<.0015)this.actSpecial(now);
-    if(Math.random()<.0018)this.act('boost',now);
-    if(Math.random()<.0006)this.act('crush',now);
+    // Ability/aggression frequency ramps up with account (meta) level (AI_DIFF, 0..1)
+    if(Math.random()<.0015*(1+AI_DIFF))this.actSpecial(now);
+    if(Math.random()<.0018*(1+AI_DIFF))this.act('boost',now);
+    if(Math.random()<.0006*(1+AI_DIFF))this.act('crush',now);
 
     // Smarter AI: stay in zone
     const dz=d2(this.head.x,this.head.y,zoneCenterX,zoneCenterY);
@@ -1961,9 +1997,9 @@ class Snake{
     const all=[player,...aiSnakes].filter(s=>s&&s.alive&&s!==this);
     for(const s of all){
       const dd=d2(this.head.x,this.head.y,s.head.x,s.head.y);
-      // Don't attack player for first 10 seconds
-      if(s.isP&&gameAge2<10000) continue;
-      if(s.len<this.len*.8&&dd<400&&Math.random()<.35)best={x:s.head.x,y:s.head.y};
+      // Grace period before AI attacks the player shrinks as account level rises (10s down to 4s)
+      if(s.isP&&gameAge2<(10000-AI_DIFF*6000)) continue;
+      if(s.len<this.len*.8&&dd<400&&Math.random()<(.35+AI_DIFF*.15))best={x:s.head.x,y:s.head.y};
       if(s.len>this.len*1.2&&dd<280&&Math.random()<.55){const fa=at2(s.head.x,s.head.y,this.head.x,this.head.y);best={x:this.head.x+Math.cos(fa)*400,y:this.head.y+Math.sin(fa)*400};}
     }
     if(best)this.ta=at2(this.head.x,this.head.y,best.x,best.y);
@@ -2378,7 +2414,7 @@ function updZone(dt){
     zoneCenterX=cl(zoneCenterX+rnd(-200,200),zoneRadius+50,WW-zoneRadius-50);
     zoneCenterY=cl(zoneCenterY+rnd(-200,200),zoneRadius+50,WH-zoneRadius-50);
     snd('zone');
-    switchBiome(zonePhase);
+    switchBiome(biomeOrder[zonePhase]);
     const btt=document.getElementById('btt');
     btt.textContent='☣ ZONE CLOSING!';btt.classList.remove('h');
     setTimeout(()=>btt.classList.add('h'),2500);
@@ -2492,18 +2528,25 @@ function togglePause(){
 // Pause on keyboard
 window.addEventListener('keydown',e=>{if(e.key==='Escape'&&running)togglePause();});
 
+function refreshMenuStats(){
+  document.getElementById('menuGames').textContent=stats.games;
+  document.getElementById('menuAccLv').textContent=stats.level||1;
+  document.getElementById('menuBestKill').textContent=stats.bestKill;
+  document.getElementById('menuBestScore').textContent=stats.bestScore;
+  document.getElementById('menuBestSurv').textContent=stats.bestSurv+'s';
+  document.getElementById('menuLevel').textContent='Lv.'+(stats.level||1);
+  const tier=getRankTier(stats.level||1);
+  document.getElementById('menuRank').textContent=tier.emoji+' '+tier.name;
+  document.getElementById('menuAvatar').style.borderColor=SNAKE_COLORS[tier.colorIdx].h;
+}
+
 function quitToMenu(){
   running=false;paused=false;
   stopMusic();
   document.getElementById('pauseOverlay').style.display='none';
   document.getElementById('pauseBtn').textContent='⏸ PAUSE';
   document.getElementById('pauseBtn').style.display='none';
-  document.getElementById('menuGames').textContent=stats.games;
-  document.getElementById('menuAccLv').textContent=stats.level||1;
-  document.getElementById('menuBestKill').textContent=stats.bestKill;
-  document.getElementById('menuBestScore').textContent=stats.bestScore;
-  document.getElementById('menuBestSurv').textContent=stats.bestSurv+'s';
-  document.getElementById('menuLevel').textContent='Lv.'+stats.level;
+  refreshMenuStats();
   scr('sm');
 }
 
@@ -2549,11 +2592,17 @@ function initGame(){
   preyItems=[];particles=[];zoom=1;targetZoom=1;shakeAmt=0;
   zonePhase=0;zoneTimer=ZONE_INTERVAL;zoneRadius=WW*.48;
   zoneCenterX=WW/2;zoneCenterY=WH/2;
+  shuffleBiomeOrder();
+
+  // Escalating difficulty + more opponents as the account (meta) level climbs
+  AI_DIFF=getDifficultyT();
+  TOTAL_PLAYERS=8+Math.floor(AI_DIFF*4); // 8 at level1, up to 12 at level30+
 
   buildWorld();
 
-  // Player
-  player=new Snake(WW/2,WH/2,SNAKE_COLORS[0],true,'YOU',selectedAbility);
+  // Player — snake color reflects the account's current rank tier
+  const rankTier=getRankTier(stats.level||1);
+  player=new Snake(WW/2,WH/2,SNAKE_COLORS[rankTier.colorIdx],true,'YOU',selectedAbility);
   // Update ability icon
   const ab=ABILITIES[selectedAbility];
   document.getElementById('ab-special-icon').textContent=ab.icon;
@@ -2561,13 +2610,14 @@ function initGame(){
 
   // AI
   aiSnakes=[];
-  const aiAbs=['lightning','hide','venom','jump','lightning','venom','jump'];
+  const aiColorPool=SNAKE_COLORS.filter((_,idx)=>idx!==rankTier.colorIdx);
+  const abilityCycle=['lightning','hide','venom','jump'];
   for(let i=0;i<TOTAL_PLAYERS-1;i++){
     const angle=((i/(TOTAL_PLAYERS-1))*Math.PI*2);
     const dist=rnd(400,700);
     const ax=cl(WW/2+Math.cos(angle)*dist,100,WW-100);
     const ay=cl(WH/2+Math.sin(angle)*dist,100,WH-100);
-    const aiSnake=new Snake(ax,ay,SNAKE_COLORS[i+1],false,AI_NAMES[i],aiAbs[i]);
+    const aiSnake=new Snake(ax,ay,aiColorPool[i%aiColorPool.length],false,AI_NAMES[i%AI_NAMES.length],abilityCycle[i%abilityCycle.length]);
     // AI starts smaller than player
     const removeSegs=ri(8,16);
     for(let r2=0;r2<removeSegs;r2++) if(aiSnake.segs.length>10) aiSnake.segs.pop();
@@ -2641,12 +2691,14 @@ function endGame(win){
   survivalTime=Math.floor((performance.now()-gameStartTime)/1000);
 
   // Update stats
+  const prevTier=getRankTier(stats.level||1);
   stats.games++;
   stats.bestScore=Math.max(stats.bestScore,score);
   stats.bestSurv=Math.max(stats.bestSurv,survivalTime);
   stats.level=Math.min(50,Math.floor(stats.bestScore/200)+1);
   saveStats();
-  document.getElementById('menuAccLv').textContent=stats.level;
+  refreshMenuStats();
+  const newTier=getRankTier(stats.level);
 
   const all=[player,...aiSnakes].filter(s=>s);
   all.sort((a,b)=>b.score-a.score);
@@ -2657,7 +2709,9 @@ function endGame(win){
   document.getElementById('goRankBadge').textContent=win?'🏆':'💀';
   document.getElementById('goTitle').textContent=win?'WINNER! #1':'ELIMINATED';
   document.getElementById('goTitle').style.color=win?'#f0c060':'#c0392b';
-  document.getElementById('goSub').textContent=win?'You are the last snake standing!':'Better luck next time, survivor.';
+  document.getElementById('goSub').textContent=newTier.name!==prevTier.name
+    ?'🎉 NEW RANK UNLOCKED: '+newTier.emoji+' '+newTier.name+'!'
+    :(win?'You are the last snake standing!':'Better luck next time, survivor.');
   document.getElementById('goSc').textContent=score;
   document.getElementById('goRk').textContent='#'+rank;
   document.getElementById('goKills').textContent=kills;
@@ -2812,22 +2866,12 @@ function confirmExit(){
 document.getElementById('btnConfirmAbility').addEventListener('click',()=>{scr('sg');initGame();});
 document.getElementById('btnRetry').addEventListener('click',()=>{scr('sg');initGame();});
 document.getElementById('btnMenu').addEventListener('click',()=>{running=false;
-  document.getElementById('menuGames').textContent=stats.games;
-  document.getElementById('menuAccLv').textContent=stats.level||1;
-  document.getElementById('menuBestKill').textContent=stats.bestKill;
-  document.getElementById('menuBestScore').textContent=stats.bestScore;
-  document.getElementById('menuBestSurv').textContent=stats.bestSurv+'s';
-  document.getElementById('menuLevel').textContent='Lv.'+stats.level;
+  refreshMenuStats();
   scr('sm');
 });
 
 // Init menu stats
-document.getElementById('menuGames').textContent=stats.games;
-  document.getElementById('menuAccLv').textContent=stats.level||1;
-document.getElementById('menuBestKill').textContent=stats.bestKill;
-document.getElementById('menuBestScore').textContent=stats.bestScore;
-document.getElementById('menuBestSurv').textContent=stats.bestSurv+'s';
-document.getElementById('menuLevel').textContent='Lv.'+stats.level;
+refreshMenuStats();
 scr('sm');
 </script>
 </body>
