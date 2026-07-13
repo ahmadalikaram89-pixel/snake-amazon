@@ -545,6 +545,48 @@ html,body{position:fixed;width:100%;height:100%;overflow:hidden}
   <button class="btn-confirm" id="btnConfirmAbility">CONFIRM &amp; PLAY →</button>
 </div>
 
+<!-- ═══════════════ HOW TO PLAY ═══════════════ -->
+<div id="sHowTo" class="screen" style="flex-direction:column;align-items:center;justify-content:center;background:rgba(5,8,5,.96);backdrop-filter:blur(20px);padding:20px;overflow:auto">
+  <div class="ability-select-title">HOW TO PLAY</div>
+  <div class="ability-select-sub">Survive the Amazon. Grow. Dominate.</div>
+  <div class="ability-cards">
+    <div class="ability-card" style="cursor:default">
+      <span class="ability-card-icon">🎮</span>
+      <div class="ability-card-name">Controls</div>
+      <div class="ability-card-desc">Mouse/drag or joystick to steer.<br>SPACE — Boost<br>Q — Special Ability<br>E — Camouflage<br>SHIFT — Crush</div>
+    </div>
+    <div class="ability-card" style="cursor:default">
+      <span class="ability-card-icon">🎯</span>
+      <div class="ability-card-name">Objective</div>
+      <div class="ability-card-desc">Eat prey and smaller snakes to grow. Avoid or crush bigger snakes. Be the last one alive.</div>
+    </div>
+    <div class="ability-card" style="cursor:default">
+      <span class="ability-card-icon">📈</span>
+      <div class="ability-card-name">Leveling</div>
+      <div class="ability-card-desc">Gain XP by eating to level up. Every level grants a reward and your snake evolves.</div>
+    </div>
+    <div class="ability-card" style="cursor:default">
+      <span class="ability-card-icon">☣</span>
+      <div class="ability-card-name">The Zone</div>
+      <div class="ability-card-desc">The play area shrinks over time. Staying outside deals damage that grows each phase.</div>
+    </div>
+  </div>
+  <button class="btn-confirm" id="btnHowToBack">← BACK</button>
+</div>
+
+<!-- ═══════════════ RECORDS ═══════════════ -->
+<div id="sRecords" class="screen" style="flex-direction:column;align-items:center;justify-content:center;background:rgba(5,8,5,.96);backdrop-filter:blur(20px);padding:20px;overflow:auto">
+  <div class="ability-select-title">RECORDS</div>
+  <div class="ability-select-sub">Your best runs so far</div>
+  <div class="go-stats-grid" style="max-width:500px">
+    <div class="go-stat"><span class="go-stat-val" id="recGames">0</span><span class="go-stat-lbl">Games Played</span></div>
+    <div class="go-stat"><span class="go-stat-val" id="recBestScore">0</span><span class="go-stat-lbl">Best Score</span></div>
+    <div class="go-stat"><span class="go-stat-val" id="recBestKill">0</span><span class="go-stat-lbl">Best Kills</span></div>
+    <div class="go-stat"><span class="go-stat-val" id="recBestSurv">0s</span><span class="go-stat-lbl">Best Survival</span></div>
+  </div>
+  <button class="btn-confirm" id="btnRecordsBack">← BACK</button>
+</div>
+
 <!-- ═══════════════ GAME ═══════════════ -->
 <div id="sg" class="screen">
   <canvas id="gc"></canvas>
@@ -562,7 +604,7 @@ html,body{position:fixed;width:100%;height:100%;overflow:hidden}
   <button onclick="togglePause()" style="background:linear-gradient(135deg,#c8a84b,#f0c060);border:none;border-radius:4px;
     padding:14px 40px;font-family:Orbitron,monospace;font-size:.9rem;font-weight:700;
     color:#0a0800;cursor:pointer;letter-spacing:.2em;margin-bottom:12px">▶ RESUME</button>
-  <button onclick="running=false;scr('sm')" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);
+  <button onclick="quitToMenu()" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);
     border-radius:4px;padding:10px 30px;font-family:Orbitron,monospace;font-size:.75rem;
     color:#fff;cursor:pointer;letter-spacing:.15em">⌂ MAIN MENU</button>
 </div>
@@ -1701,6 +1743,8 @@ class Snake{
     this.jumping=false;this.jumpVy=0;this.jumpY=0;
     // Venom effect
     this.venomTimer=0;
+    // Last snake to deal damage to this one, for kill attribution
+    this.lastHitBy=null;this.lastHitAt=-99999;this.lastHitCause='';
     // Stats
     this.hp=this.isP?180:100;this.score=0;this.kills=0;
     this.gp=Math.random()*Math.PI*2;this.tongueT=0;
@@ -1735,16 +1779,18 @@ class Snake{
           const others=[player,...aiSnakes].filter(s=>s&&s.alive&&s!==this&&s!==best);
           if(others.length>0){
             const second=others.reduce((a,b)=>d2(this.head.x,this.head.y,a.head.x,a.head.y)<d2(this.head.x,this.head.y,b.head.x,b.head.y)?a:b);
-            second.hp-=25;spLightning(second.head.x,second.head.y);
+            second.hp-=25;second.lastHitBy=this;second.lastHitAt=now;second.lastHitCause='lightning';
+            spLightning(second.head.x,second.head.y);
           }
         }
-        // Kill smaller
+        // Kill smaller — attribution & feed/notif handled centrally in checkDeaths,
+        // except when the player is the victim (no later step covers that case)
+        best.lastHitBy=this;best.lastHitAt=now;best.lastHitCause='lightning';
         best.hp=0;
-        if(this.isP){kills++;addKillFeed('YOU',best.name,true);showKillNotif('⚡ LIGHTNING KILL!');}
-        else if(best.isP)addKillFeed(this.name,'YOU',false);
-        else addKillFeed(this.name,best.name,false);
+        if(best.isP)addKillFeed(this.name,'YOU',false);
       } else {
-        best.hp-=35;spP(best.head.x,best.head.y,'#ffee44',15,true);
+        best.hp-=35;best.lastHitBy=this;best.lastHitAt=now;best.lastHitCause='lightning';
+        spP(best.head.x,best.head.y,'#ffee44',15,true);
       }
       shakeAmt=Math.max(shakeAmt,8);
     }
@@ -1756,7 +1802,9 @@ class Snake{
     for(const s of all){
       if(d2(this.head.x,this.head.y,s.head.x,s.head.y)<160){
         s.venomTimer=180; // 3 seconds of venom
-        s.hp-=10;if(this.isP&&!s.isP)score+=5;
+        s.lastHitBy=this;s.lastHitAt=now;s.lastHitCause='venom';
+        s.hp-=10*(this.isP&&this._venomPower?this._venomPower:1);
+        if(this.isP&&!s.isP)score+=5;
       }
     }
     this.ab.special.on=true;this.ab.special.de=now+500;
@@ -1797,7 +1845,7 @@ class Snake{
       if(this.jumpY>=0){this.jumpY=0;this.jumping=false;
         // Landing damage
         const all=[player,...aiSnakes].filter(s=>s&&s.alive&&s!==this);
-        for(const s of all){if(d2(this.head.x,this.head.y,s.head.x,s.head.y)<80){s.hp-=30;spP(s.head.x,s.head.y,'#ff8844',12,true);if(this.isP)shakeAmt=10;}}
+        for(const s of all){if(d2(this.head.x,this.head.y,s.head.x,s.head.y)<80){s.hp-=30;s.lastHitBy=this;s.lastHitAt=now;s.lastHitCause='crush';spP(s.head.x,s.head.y,'#ff8844',12,true);if(this.isP)shakeAmt=10;}}
       }
     }
 
@@ -1888,7 +1936,7 @@ class Snake{
     const all=[player,...aiSnakes].filter(s=>s&&s.alive&&s!==this);
     for(const s of all){
       const dd=d2(this.head.x,this.head.y,s.head.x,s.head.y);
-      // Don't attack player for first 15 seconds
+      // Don't attack player for first 10 seconds
       if(s.isP&&gameAge2<10000) continue;
       if(s.len<this.len*.8&&dd<400&&Math.random()<.35)best={x:s.head.x,y:s.head.y};
       if(s.len>this.len*1.2&&dd<280&&Math.random()<.55){const fa=at2(s.head.x,s.head.y,this.head.x,this.head.y);best={x:this.head.x+Math.cos(fa)*400,y:this.head.y+Math.sin(fa)*400};}
@@ -2174,7 +2222,7 @@ class Snake{
 // ═══════════════════════════════════════════
 // COLLISION
 // ═══════════════════════════════════════════
-function doCollide(){
+function doCollide(now){
   const all=[player,...aiSnakes].filter(s=>s&&s.alive);
   for(let i=0;i<all.length;i++)for(let j=i+1;j<all.length;j++){
     const a=all[i],b=all[j];
@@ -2191,15 +2239,16 @@ function doCollide(){
       const lenRatio=a.len/(b.len||1);
       if(lenRatio>1.2){
         // A is bigger - B takes heavy damage
-        b.hp-=a.crushOn?20:8;
+        b.hp-=a.crushOn?20:8;b.lastHitBy=a;b.lastHitAt=now;b.lastHitCause=a.crushOn?'crush':'collision';
         spP(b.head.x,b.head.y,'#ff4444',8,true);
       } else if(lenRatio<0.83){
         // B is bigger - A takes heavy damage
-        a.hp-=b.crushOn?20:8;
+        a.hp-=b.crushOn?20:8;a.lastHitBy=b;a.lastHitAt=now;a.lastHitCause=b.crushOn?'crush':'collision';
         spP(a.head.x,a.head.y,'#ff4444',8,true);
       } else {
         // Similar size - both take damage
-        a.hp-=a.crushOn?8:4;b.hp-=b.crushOn?8:4;
+        a.hp-=a.crushOn?8:4;a.lastHitBy=b;a.lastHitAt=now;a.lastHitCause=b.crushOn?'crush':'collision';
+        b.hp-=b.crushOn?8:4;b.lastHitBy=a;b.lastHitAt=now;b.lastHitCause=a.crushOn?'crush':'collision';
         spP((a.head.x+b.head.x)/2,(a.head.y+b.head.y)/2,'#ff8844',6,false);
       }
       if(a.isP||b.isP)shakeAmt=Math.max(shakeAmt,5*cm);
@@ -2213,7 +2262,7 @@ function doCollide(){
         if(d2(att.head.x,att.head.y,def.segs[k].x,def.segs[k].y)<att.rad+def.rad*.72){
           const force=att.crushOn?4:2,da=at2(att.head.x,att.head.y,def.segs[k].x,def.segs[k].y);
           def.vx-=Math.cos(da)*force*2;def.vy-=Math.sin(da)*force*2;
-          def.hp-=att.crushOn?14:5;
+          def.hp-=att.crushOn?14:5;def.lastHitBy=att;def.lastHitAt=now;def.lastHitCause=att.crushOn?'crush':'collision';
           spP(def.segs[k].x,def.segs[k].y,'#ff4444',6);snd('hit');
           if(att.isP||def.isP)shakeAmt=Math.max(shakeAmt,4);break;
         }
@@ -2348,7 +2397,7 @@ function applyLevelReward(lv){
   }
   if(lv===10){
     // APEX MODE - all cooldowns halved
-    AB_CD.boost=3000;AB_CD.boost=3000;
+    AB_CD.boost=3000;AB_CD.crush=4000;AB_CD.hide=6000;
     ABILITIES.lightning.cd=4000;ABILITIES.venom.cd=3500;
     ABILITIES.jump.cd=4500;ABILITIES.hide.cd=6000;
     player._apex=true;
@@ -2408,6 +2457,21 @@ function togglePause(){
 }
 // Pause on keyboard
 window.addEventListener('keydown',e=>{if(e.key==='Escape'&&running)togglePause();});
+
+function quitToMenu(){
+  running=false;paused=false;
+  stopMusic();
+  document.getElementById('pauseOverlay').style.display='none';
+  document.getElementById('pauseBtn').textContent='⏸ PAUSE';
+  document.getElementById('pauseBtn').style.display='none';
+  document.getElementById('menuGames').textContent=stats.games;
+  document.getElementById('menuAccLv').textContent=stats.level||1;
+  document.getElementById('menuBestKill').textContent=stats.bestKill;
+  document.getElementById('menuBestScore').textContent=stats.bestScore;
+  document.getElementById('menuBestSurv').textContent=stats.bestSurv+'s';
+  document.getElementById('menuLevel').textContent='Lv.'+stats.level;
+  scr('sm');
+}
 
 // ── BIOME TRANSITION ──
 function switchBiome(biomeIdx){
@@ -2491,7 +2555,7 @@ function initGame(){
 // ═══════════════════════════════════════════
 // CHECK WINS/KILLS
 // ═══════════════════════════════════════════
-function checkDeaths(){
+function checkDeaths(now){
   // Show FINAL DUEL when 2 remain
   const aliveCount=[player,...aiSnakes].filter(s=>s&&s.alive).length;
   if(aliveCount===2){
@@ -2508,11 +2572,16 @@ function checkDeaths(){
     if(!ai.alive)continue;
     if(ai.hp<=0){
       ai.alive=false;spP(ai.head.x,ai.head.y,ai.col,20,true);
-      // Was player nearby? Count kill
-      if(player.alive&&d2(player.head.x,player.head.y,ai.head.x,ai.head.y)<300){
+      // Credit the kill to whoever actually dealt the fatal damage recently
+      const killer=ai.lastHitBy;
+      const credited=killer&&killer.alive&&(now-ai.lastHitAt<3000);
+      if(credited&&killer.isP){
         kills++;score+=100;snd('kill');
-        addKillFeed('YOU',ai.name,true);showKillNotif('💀 ELIMINATED: '+ai.name);
+        const notif=ai.lastHitCause==='lightning'?'⚡ LIGHTNING KILL!':'💀 ELIMINATED: '+ai.name;
+        addKillFeed('YOU',ai.name,true);showKillNotif(notif);
         stats.bestKill=Math.max(stats.bestKill,kills);saveStats();
+      } else if(credited&&!killer.isP){
+        addKillFeed(killer.name,ai.name,false);
       }
       // Drop prey where they died
       for(let i=0;i<3;i++) preyItems.push({x:ai.head.x+rnd(-40,40),y:ai.head.y+rnd(-40,40),e:'💀',n:'Remains',p:30,r:10,s:0,c:'#888',vx:0,vy:0,wt:300,pu:0,scared:false});
@@ -2587,8 +2656,8 @@ function loop(ts){
   // Zone
   updZone(dt);
   updPrey();
-  doCollide();
-  checkDeaths();
+  doCollide(now);
+  checkDeaths(now);
   updParts();
 
   // Camera
@@ -2639,6 +2708,10 @@ window.addEventListener('touchstart',e=>{
 window.addEventListener('keydown',e=>{keys[e.key]=true;if(running&&[' ','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key))e.preventDefault();});
 window.addEventListener('keyup',e=>{keys[e.key]=false;if(e.key===' ')keys._bu=false;if(e.key==='Shift')keys._su=false;if(e.key==='e')keys._eu=false;if(e.key==='q')keys._qu=false;});
 window.addEventListener('resize',resize);
+// Clear held keys on focus loss so a key doesn't get stuck "down" after alt-tab
+function clearKeys(){for(const k in keys)keys[k]=false;}
+window.addEventListener('blur',clearKeys);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)clearKeys();});
 
 // Joystick
 const joyOuter=document.getElementById('joyOuter');
@@ -2662,8 +2735,16 @@ if(joyOuter){
 // Buttons
 document.getElementById('btnPlay').addEventListener('click',()=>{scr('sg');initGame();});
 document.getElementById('btnAbility').addEventListener('click',()=>scr('sAbility'));
-document.getElementById('btnHowTo').addEventListener('click',()=>{});
-document.getElementById('btnRecords').addEventListener('click',()=>{});
+document.getElementById('btnHowTo').addEventListener('click',()=>scr('sHowTo'));
+document.getElementById('btnHowToBack').addEventListener('click',()=>scr('sm'));
+document.getElementById('btnRecords').addEventListener('click',()=>{
+  document.getElementById('recGames').textContent=stats.games;
+  document.getElementById('recBestScore').textContent=stats.bestScore;
+  document.getElementById('recBestKill').textContent=stats.bestKill;
+  document.getElementById('recBestSurv').textContent=stats.bestSurv+'s';
+  scr('sRecords');
+});
+document.getElementById('btnRecordsBack').addEventListener('click',()=>scr('sm'));
 document.getElementById('btnConfirmAbility').addEventListener('click',()=>{scr('sg');initGame();});
 document.getElementById('btnRetry').addEventListener('click',()=>{scr('sg');initGame();});
 document.getElementById('btnMenu').addEventListener('click',()=>{running=false;
