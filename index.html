@@ -875,13 +875,17 @@ let player=null,aiSnakes=[],preyItems=[],particles=[];
 let score=0,kills=0,survivalTime=0,gameStartTime=0;
 let paused=false,pauseStartTime=0,totalPausedTime=0;
 let inGameLevel=1,inGameXP=0;
-const LEVEL_XP=[0,80,200,380,600,880,1200,1600,2100,2700]; // XP needed per level
+const MAX_LEVEL=15;
+// Cumulative XP needed per level, gentler curve so a full match can realistically reach the top
+const LEVEL_XP=[0,75,165,270,390,525,675,840,1020,1215,1425,1650,1890,2145,2415];
 const LEVEL_REWARDS={
-  2:{name:'Power Boost',desc:'Boost 50% faster',icon:'⚡'},
+  2:{name:'Power Boost',desc:'Boost 30% faster',icon:'⚡'},
   4:{name:'Toxic Venom',desc:'Venom does 2x damage',icon:'☠️'},
-  6:{name:'Thick Scales',desc:'+30 max HP',icon:'🛡️'},
+  6:{name:'Thick Scales',desc:'+20 max HP',icon:'🛡️'},
   8:{name:'Chain Lightning',desc:'Lightning hits twice',icon:'⚡⚡'},
-  10:{name:'APEX MODE',desc:'All abilities enhanced!',icon:'👑'},
+  10:{name:'Apex Reflexes',desc:'Special cooldowns -25%',icon:'🔥'},
+  12:{name:'Titan Scales',desc:'+20 more max HP',icon:'🛡️🛡️'},
+  14:{name:'APEX MODE',desc:'All cooldowns halved!',icon:'👑'},
 };
 let camX=0,camY=0,mX=0,mY=0,keys={};
 let zoom=1,targetZoom=1,shakeAmt=0;
@@ -1911,7 +1915,7 @@ class Snake{
         }
         spP(p.x,p.y,p.c,8);preyItems.splice(i,1);
         if(preyItems.length<PREY_COUNT*.55)spawnPrey(3);
-        const maxHp=this._maxHp||100;
+        const maxHp=this._maxHp||(this.isP?180:100);
         if(this.hp<maxHp)this.hp=Math.min(maxHp,this.hp+5); // heal on eat
       }
     }
@@ -2368,7 +2372,7 @@ function updZone(dt){
 // ═══════════════════════════════════════════
 // ── IN-GAME LEVEL SYSTEM ──
 function checkInGameLevel(){
-  if(inGameLevel>=10) return;
+  if(inGameLevel>=MAX_LEVEL) return;
   const needed=LEVEL_XP[inGameLevel]||9999;
   if(inGameXP>=needed){
     inGameLevel++;
@@ -2381,25 +2385,36 @@ function checkInGameLevel(){
 function applyLevelReward(lv){
   if(!player) return;
   if(lv===2){
-    // Boost 50% faster cooldown
-    AB_CD.boost=4000;
-    AB_DUR.boost=2800;
+    // Boost cooldown faster + duration longer
+    AB_CD.boost=4800;
+    AB_DUR.boost=2400;
   }
   if(lv===4){
     // Venom 2x damage - handled in actSpecial
     player._venomPower=2;
   }
   if(lv===6){
-    // +30 HP
-    player.hp=Math.min(130,player.hp+30);
-    player._maxHp=130;
+    // +20 max HP over the player's base 180
+    player._maxHp=200;
+    player.hp=Math.min(player._maxHp,player.hp+20);
   }
   if(lv===8){
     // Chain lightning - handled in _doLightning
     player._chainLightning=true;
   }
   if(lv===10){
-    // APEX MODE - all cooldowns halved
+    // Apex Reflexes - special cooldowns -25%
+    ABILITIES.lightning.cd=6000;ABILITIES.venom.cd=5500;
+    ABILITIES.jump.cd=7000;ABILITIES.hide.cd=9000;
+    AB_CD.crush=6000;
+  }
+  if(lv===12){
+    // +20 more max HP
+    player._maxHp=(player._maxHp||200)+20;
+    player.hp=Math.min(player._maxHp,player.hp+20);
+  }
+  if(lv===14){
+    // APEX MODE - all cooldowns halved from base
     AB_CD.boost=3000;AB_CD.crush=4000;AB_CD.hide=6000;
     ABILITIES.lightning.cd=4000;ABILITIES.venom.cd=3500;
     ABILITIES.jump.cd=4500;ABILITIES.hide.cd=6000;
@@ -2410,10 +2425,8 @@ function applyLevelReward(lv){
 }
 
 function showLevelUp(lv){
-  // Switch biome at levels 3,5,7,9
-  const biomeMap={3:1,5:2,7:3,9:4};
-  if(biomeMap[lv]) switchBiome(biomeMap[lv]);
-
+  // Biome/stage transitions are driven by the zone timer (updZone), not by level,
+  // so every match sees all biomes at the same pace regardless of player skill.
   const pop=document.getElementById('levelUpPop');
   const reward=LEVEL_REWARDS[lv]||{name:'Level Up!',icon:'⬆️',desc:''};
   document.getElementById('lvlBadge').textContent=reward.icon+' LEVEL '+lv+'!';
@@ -2422,13 +2435,13 @@ function showLevelUp(lv){
   setTimeout(()=>pop.style.opacity='0',2500);
   // Update HUD
   document.getElementById('hLv').textContent=lv;
-  document.getElementById('hLvIcon').textContent=lv>=10?'👑':lv>=8?'⚡':lv>=6?'🛡️':lv>=4?'☠️':'🐍';
+  document.getElementById('hLvIcon').textContent=lv>=14?'👑':lv>=10?'🔥':lv>=8?'⚡':lv>=6?'🛡️':lv>=4?'☠️':'🐍';
 }
 
 function updXPBar(){
   if(!running) return;
   const lv=inGameLevel;
-  if(lv>=10){
+  if(lv>=MAX_LEVEL){
     document.getElementById('hXpBar').style.width='100%';
     document.getElementById('hXpVal').textContent='MAX';
     return;
@@ -2477,13 +2490,17 @@ function quitToMenu(){
 }
 
 // ── BIOME TRANSITION ──
+let lastAnnouncedForm='';
 function switchBiome(biomeIdx){
   currentBiome=BIOMES[Math.min(biomeIdx,BIOMES.length-1)];
   const overlay=document.getElementById('biomeTransition');
   const form=getSnakeForm(inGameLevel);
   document.getElementById('biomeTransName').textContent=currentBiome.name;
   document.getElementById('biomeTransSub').textContent='NEW ZONE OPENING';
-  document.getElementById('biomeTransForm').textContent='🐍 '+form.name+' FORM UNLOCKED';
+  // Only announce a form "unlock" if it actually changed since the last biome transition
+  // (form now evolves on its own level schedule, independent of biome/zone timing)
+  document.getElementById('biomeTransForm').textContent=form.name!==lastAnnouncedForm?'🐍 '+form.name+' FORM UNLOCKED':'';
+  lastAnnouncedForm=form.name;
   overlay.style.display='flex';
   // Rebuild world with new biome
   setTimeout(()=>{
@@ -2501,8 +2518,9 @@ function initGame(){
 
   score=0;kills=0;survivalTime=0;gameStartTime=performance.now();
   inGameLevel=1;inGameXP=0;
+  lastAnnouncedForm=getSnakeForm(1).name;
   // Reset cooldowns
-  AB_CD.boost=6000;AB_DUR.boost=2000;
+  AB_CD.boost=6000;AB_DUR.boost=2000;AB_CD.crush=8000;AB_CD.hide=12000;
   ABILITIES.lightning.cd=8000;ABILITIES.venom.cd=7000;
   ABILITIES.jump.cd=9000;ABILITIES.hide.cd=12000;
   document.getElementById('hLv').textContent='1';
