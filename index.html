@@ -595,11 +595,6 @@ html,body{position:fixed;width:100%;height:100%;overflow:hidden}
   <canvas id="gc"></canvas>
 
   <!-- HUD Top -->
-  <button id="pauseBtn" onclick="togglePause()" style="position:absolute;top:65px;left:50%;transform:translateX(-50%);
-  z-index:20;background:rgba(0,0,0,.65);border:1px solid rgba(255,255,255,.15);border-radius:6px;
-  padding:4px 12px;font-family:Orbitron,monospace;font-size:.55rem;color:#aaa;cursor:pointer;
-  letter-spacing:.1em;display:none;pointer-events:auto">⏸ PAUSE</button>
-
 <!-- Pause overlay -->
 <div id="pauseOverlay" style="display:none;position:absolute;inset:0;background:rgba(0,0,0,.85);
   z-index:50;flex-direction:column;align-items:center;justify-content:center;">
@@ -633,6 +628,10 @@ html,body{position:fixed;width:100%;height:100%;overflow:hidden}
       <span class="zone-label">☣ Zone Closing</span>
       <div class="zone-timer" id="hZoneTimer">3:00</div>
       <div class="zone-bar"><div class="zone-bar-fill" id="hZoneBar" style="width:100%"></div></div>
+      <button id="pauseBtn" onclick="togglePause()" style="margin-top:6px;
+        background:rgba(0,0,0,.65);border:1px solid rgba(255,255,255,.15);border-radius:6px;
+        padding:4px 12px;font-family:Orbitron,monospace;font-size:.55rem;color:#aaa;cursor:pointer;
+        letter-spacing:.1em;display:none;pointer-events:auto">⏸ PAUSE</button>
     </div>
     <div class="score-box">
       <div class="score-val" id="hSc" style="color:#f0c060;font-size:1.6rem">0</div>
@@ -2565,7 +2564,7 @@ function initGame(){
   document.getElementById('zoneWarning').classList.remove('danger');
   if(audioUnlocked)loadMP3s();
   startMusic();
-  document.getElementById('pauseBtn').style.display='block';
+  document.getElementById('pauseBtn').style.display='inline-block';
   paused=false;totalPausedTime=0;
   running=true;
   if(rafId)cancelAnimationFrame(rafId);
