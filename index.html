@@ -425,11 +425,12 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--dark);color:va
 @media(max-width:600px){
   .menu-left{padding:0 0 50px 20px;width:100%}
   .menu-right{width:50%;opacity:.4}
-  /* Move ability bar to bottom-right so it doesn't sit on top of the HP/level box (bottom-left) */
-  .abb{left:auto;right:10px;bottom:250px;transform:none}
+  /* Ability bar bottom-left; HP/level box swaps to bottom-right in its place, so neither overlaps the other or the joystick */
+  .abb{left:14px;right:auto;bottom:135px;transform:none}
+  .hp-hud{left:auto;right:10px;bottom:250px}
   .abs{width:52px;height:52px}.abs-k,.abs-n{display:none}
   #mm{width:100px;height:100px}
-  /* Movement joystick under the ability bar, same side */
+  /* Movement joystick stays bottom-right, below the HP box */
   #touchCtrl{display:block;left:auto;right:10px;bottom:110px}
   .go-stats-grid{grid-template-columns:repeat(2,1fr)}
 }
@@ -447,7 +448,7 @@ html,body{position:fixed;width:100%;height:100%;overflow:hidden}
 .menu-btn,.btn-play,.go-btn,.ability-card{cursor:pointer;-webkit-tap-highlight-color:transparent}
 /* HP bar more visible on mobile */
 @media(max-width:768px){
-  .hp-hud{padding:8px 12px;min-width:155px;bottom:135px}
+  .hp-hud{padding:8px 12px;min-width:155px}
   .zone-box{padding:6px 10px}
   .alive-box{padding:6px 10px}
   .score-box{padding:6px 10px}
@@ -2853,15 +2854,14 @@ function cancelExit(){
 function confirmExit(){
   document.getElementById('exitConfirmMsg').textContent='CLOSING...';
   document.getElementById('exitConfirmBtns').innerHTML='';
-  window.open('','_self');
-  window.close();
-  // Some browsers block scripted tab close; let the player know how to finish up
+  stopMusic();
+  try{window.open('','_self');window.close();}catch(e){}
+  // Most browsers block scripted tab close for tabs they didn't open via
+  // script, so window.close() alone silently does nothing. Navigate away
+  // instead, so the game session actually ends either way.
   setTimeout(()=>{
-    document.getElementById('exitConfirmMsg').textContent='You can now close this tab to exit.';
-    document.getElementById('exitConfirmBtns').innerHTML=
-      '<button onclick="cancelExit()" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);'+
-      'border-radius:4px;padding:12px 32px;font-family:Orbitron,monospace;font-size:.8rem;color:#fff;cursor:pointer;letter-spacing:.15em">OK</button>';
-  },400);
+    window.location.replace('about:blank');
+  },300);
 }
 document.getElementById('btnConfirmAbility').addEventListener('click',()=>{scr('sg');initGame();});
 document.getElementById('btnRetry').addEventListener('click',()=>{scr('sg');initGame();});
