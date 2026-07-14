@@ -217,11 +217,28 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--dark);color:va
 #gc{position:absolute;inset:0;width:100%;height:100%}
 
 /* ── HUD — PUBG Style ── */
-/* Top bar */
+/* Top bar: Alive + Zone + Score merged into one translucent bar instead of three boxes */
 .hud-top{
   position:absolute;top:0;left:0;right:0;
-  display:flex;align-items:flex-start;justify-content:space-between;
+  display:flex;align-items:flex-start;justify-content:flex-start;
   padding:max(10px,env(safe-area-inset-top)) 14px 10px;z-index:10;pointer-events:none;
+}
+.hud-bar{
+  display:flex;align-items:stretch;
+  background:rgba(0,0,0,.32);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  border:1px solid rgba(255,255,255,.1);border-radius:6px;
+  overflow:hidden;
+}
+.hud-div{width:1px;background:rgba(255,255,255,.12);align-self:stretch;margin:8px 0}
+.hud-seg{display:flex;align-items:center;gap:10px;padding:8px 14px}
+.hud-seg-icon{font-size:1.1rem}
+.hud-seg-val{font-family:var(--fo);font-size:1.5rem;font-weight:900;color:#fff;line-height:1}
+.hud-seg-lbl{font-size:.55rem;color:var(--dim);letter-spacing:.15em;text-transform:uppercase}
+.hud-zone-seg{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px 16px;min-width:112px}
+.hud-zone-top{display:flex;align-items:center;gap:6px;justify-content:center}
+.hud-pause-btn{
+  background:transparent;border:none;border-left:1px solid rgba(255,255,255,.12);
+  color:#aaa;font-size:1.1rem;padding:0 16px;cursor:pointer;pointer-events:auto;
 }
 
 /* Kill feed top-right */
@@ -230,42 +247,20 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--dark);color:va
   min-width:200px;
 }
 .kill-item{
-  background:rgba(0,0,0,.6);border-left:3px solid var(--red);
+  background:rgba(0,0,0,.4);border-left:3px solid var(--red);
   padding:4px 10px;font-size:.68rem;color:#fff;border-radius:2px;
   animation:killFadeIn .3s ease both;
   font-family:var(--fh);letter-spacing:.05em;
+  backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
 }
 .kill-item.you{border-left-color:var(--gold);}
 @keyframes killFadeIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
 
-/* Players alive counter */
-.alive-box{
-  background:rgba(0,0,0,.65);
-  border:1px solid rgba(255,255,255,.1);
-  border-radius:3px;padding:8px 14px;
-  display:flex;align-items:center;gap:10px;
-}
-.alive-icon{font-size:1.1rem}
-.alive-count{font-family:var(--fo);font-size:1.5rem;font-weight:900;color:#fff;line-height:1}
-.alive-label{font-size:.55rem;color:var(--dim);letter-spacing:.15em;text-transform:uppercase}
-
-/* Zone timer */
-.zone-box{
-  background:rgba(0,0,0,.65);border:1px solid rgba(180,50,50,.4);
-  border-radius:3px;padding:8px 16px;text-align:center;
-}
-.zone-label{font-size:.55rem;color:#ff8080;letter-spacing:.2em;text-transform:uppercase;display:block}
-.zone-timer{font-family:var(--fo);font-size:1.3rem;font-weight:700;color:#ff4444;line-height:1}
-.zone-bar{width:120px;height:3px;background:rgba(255,255,255,.15);border-radius:99px;margin-top:4px;overflow:hidden}
+/* Zone timer (inside .hud-zone-seg) */
+.zone-label{font-size:.5rem;color:#ff8080;letter-spacing:.15em;text-transform:uppercase}
+.zone-timer{font-family:var(--fo);font-size:1.15rem;font-weight:700;color:#ff4444;line-height:1}
+.zone-bar{width:110px;height:3px;background:rgba(255,255,255,.15);border-radius:99px;margin-top:4px;overflow:hidden}
 .zone-bar-fill{height:100%;background:linear-gradient(90deg,#ff4444,#ff8844);border-radius:99px;transition:width .5s}
-
-/* Score / rank */
-.score-box{
-  background:rgba(0,0,0,.75);border:1px solid rgba(200,168,75,.4);
-  border-radius:3px;padding:8px 14px;text-align:right;
-}
-.score-val{font-family:var(--fo);font-size:1.4rem;font-weight:900;color:var(--gold2);line-height:1}
-.score-lbl{font-size:.5rem;color:var(--dim);letter-spacing:.2em;text-transform:uppercase}
 
 /* HP bar — bottom left */
 .hp-hud{
@@ -285,21 +280,22 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--dark);color:va
 .size-label{font-size:.55rem;color:var(--dim);letter-spacing:.1em;text-transform:uppercase;flex:1}
 .size-val{font-family:var(--fo);font-size:.75rem;color:var(--gold);font-weight:700}
 
-/* Ability bar — bottom center */
+/* Ability bar — bottom center. One translucent tray holding all 4 icons
+   instead of four separately-boxed buttons. */
 .abb{
   position:absolute;bottom:145px;left:50%;transform:translateX(-50%);
-  display:flex;gap:8px;z-index:15;pointer-events:auto;
+  display:flex;gap:2px;z-index:15;pointer-events:auto;
+  background:rgba(0,0,0,.32);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:6px;
 }
 .abs{
-  position:relative;width:64px;height:64px;
-  background:rgba(0,0,0,.75);
-  border:2px solid rgba(255,255,255,.15);
-  border-radius:4px;
+  position:relative;width:60px;height:60px;
+  border-radius:5px;
   display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:1px;overflow:hidden;transition:all .2s;
 }
-.abs.ready{border-color:rgba(200,168,75,.6);}
-.abs.on{border-color:var(--gold2);box-shadow:0 0 12px rgba(200,168,75,.5);}
+.abs.ready{background:rgba(200,168,75,.14);}
+.abs.on{background:rgba(200,168,75,.3);box-shadow:0 0 12px rgba(200,168,75,.5) inset;}
 .abs.cd{opacity:.45;filter:grayscale(.4)}
 .abs-i{font-size:1.3rem;line-height:1;pointer-events:none}
 .abs-k{font-family:var(--fo);font-size:.4rem;color:rgba(200,168,75,.6);letter-spacing:.05em}
@@ -309,8 +305,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--dark);color:va
 /* Minimap */
 #mm{
   position:absolute;top:70px;right:10px;width:130px;height:130px;
-  border:2px solid rgba(255,255,255,.15);border-radius:4px;
-  background:rgba(0,0,0,.8);z-index:10;
+  border:1px solid rgba(255,255,255,.12);border-radius:4px;
+  background:rgba(0,0,0,.4);z-index:10;
 }
 .mm-label{
   position:absolute;top:65px;right:10px;
@@ -450,12 +446,10 @@ html,body{position:fixed;width:100%;height:100%;overflow:hidden}
 /* HP bar more visible on mobile */
 @media(max-width:768px){
   .hp-hud{padding:8px 12px;min-width:155px}
-  .zone-box{padding:6px 10px}
-  .alive-box{padding:6px 10px}
-  .score-box{padding:6px 10px}
+  .hud-seg{padding:6px 10px}
+  .hud-zone-seg{padding:6px 10px;min-width:90px}
   .zone-timer{font-size:1.1rem}
-  .alive-count{font-size:1.3rem}
-  .score-val{font-size:1.2rem}
+  .hud-seg-val{font-size:1.2rem}
   /* Kill feed smaller */
   .kill-item{font-size:.62rem;padding:3px 8px}
   /* Biome title */
@@ -638,25 +632,30 @@ html,body{position:fixed;width:100%;height:100%;overflow:hidden}
 </div>
 
 <div class="hud-top">
-    <div class="alive-box">
-      <span class="alive-icon">🐍</span>
-      <div>
-        <div class="alive-count" id="hAlive">8</div>
-        <div class="alive-label">Alive</div>
+    <div class="hud-bar">
+      <div class="hud-seg">
+        <span class="hud-seg-icon">🐍</span>
+        <div>
+          <div class="hud-seg-val" id="hAlive">8</div>
+          <div class="hud-seg-lbl">Alive</div>
+        </div>
       </div>
-    </div>
-    <div class="zone-box">
-      <span class="zone-label">☣ Zone Closing</span>
-      <div class="zone-timer" id="hZoneTimer">3:00</div>
-      <div class="zone-bar"><div class="zone-bar-fill" id="hZoneBar" style="width:100%"></div></div>
-      <button id="pauseBtn" onclick="togglePause()" style="margin-top:6px;
-        background:rgba(0,0,0,.65);border:1px solid rgba(255,255,255,.15);border-radius:6px;
-        padding:4px 12px;font-family:Orbitron,monospace;font-size:.55rem;color:#aaa;cursor:pointer;
-        letter-spacing:.1em;display:none;pointer-events:auto">⏸ PAUSE</button>
-    </div>
-    <div class="score-box">
-      <div class="score-val" id="hSc" style="color:#f0c060;font-size:1.6rem">0</div>
-      <div class="score-lbl">Score</div>
+      <div class="hud-div"></div>
+      <div class="hud-zone-seg">
+        <div class="hud-zone-top">
+          <span class="zone-label">☣ Zone</span>
+          <span class="zone-timer" id="hZoneTimer">3:00</span>
+        </div>
+        <div class="zone-bar"><div class="zone-bar-fill" id="hZoneBar" style="width:100%"></div></div>
+      </div>
+      <div class="hud-div"></div>
+      <div class="hud-seg">
+        <div>
+          <div class="hud-seg-val" id="hSc" style="color:#f0c060">0</div>
+          <div class="hud-seg-lbl">Score</div>
+        </div>
+      </div>
+      <button id="pauseBtn" onclick="togglePause()" class="hud-pause-btn" style="display:none">⏸</button>
     </div>
   </div>
 
@@ -2340,7 +2339,7 @@ function doCollide(now){
 // ═══════════════════════════════════════════
 function drawMini(){
   const mw=miniCanvas.width,mh=miniCanvas.height;
-  miniCtx.fillStyle='rgba(5,10,5,.92)';miniCtx.fillRect(0,0,mw,mh);
+  miniCtx.fillStyle='rgba(5,10,5,.55)';miniCtx.fillRect(0,0,mw,mh);
   const sx=mw/WW,sz=mh/WH;
   // Zone circle on minimap
   const zsx=zoneCenterX*sx,zsy=zoneCenterY*sz,zr=zoneRadius*sx;
@@ -2517,11 +2516,11 @@ function togglePause(){
   const btn=document.getElementById('pauseBtn');
   if(paused){
     overlay.style.display='flex';
-    btn.textContent='▶ RESUME';
+    btn.textContent='▶';
     pauseStartTime=performance.now();
   } else {
     overlay.style.display='none';
-    btn.textContent='⏸ PAUSE';
+    btn.textContent='⏸';
     totalPausedTime+=performance.now()-pauseStartTime;
     lastTime=performance.now();
     if(!rafId||!running){running=true;rafId=requestAnimationFrame(loop);}
@@ -2546,7 +2545,7 @@ function quitToMenu(){
   running=false;paused=false;
   stopMusic();
   document.getElementById('pauseOverlay').style.display='none';
-  document.getElementById('pauseBtn').textContent='⏸ PAUSE';
+  document.getElementById('pauseBtn').textContent='⏸';
   document.getElementById('pauseBtn').style.display='none';
   refreshMenuStats();
   scr('sm');
