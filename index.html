@@ -898,9 +898,9 @@ function shuffleBiomeOrder(){
 const SNAKE_FORMS=[
   {minLv:1,  name:'Anaconda',    headScale:1.45, eyeStyle:'normal',  twoHeads:false, colMult:1.0,  glowCol:'#00ffaa'},
   {minLv:3,  name:'Giant Boa',   headScale:1.55, eyeStyle:'normal',  twoHeads:false, colMult:1.1,  glowCol:'#44ff44'},
-  {minLv:5,  name:'Cobra',       headScale:1.7,  eyeStyle:'cobra',   twoHeads:false, colMult:1.2,  glowCol:'#ffcc00'},
-  {minLv:7,  name:'King Cobra',  headScale:1.85, eyeStyle:'cobra',   twoHeads:false, colMult:1.3,  glowCol:'#ff8800'},
-  {minLv:9,  name:'Twin Cobra',  headScale:2.0,  eyeStyle:'cobra',   twoHeads:true,  colMult:1.4,  glowCol:'#ff2200'},
+  {minLv:5,  name:'Cobra',       headScale:1.55, eyeStyle:'cobra',   twoHeads:false, colMult:1.2,  glowCol:'#ffcc00'},
+  {minLv:7,  name:'King Cobra',  headScale:1.65, eyeStyle:'cobra',   twoHeads:false, colMult:1.3,  glowCol:'#ff8800'},
+  {minLv:9,  name:'Twin Cobra',  headScale:1.75, eyeStyle:'cobra',   twoHeads:true,  colMult:1.4,  glowCol:'#ff2200'},
 ];
 
 function getSnakeForm(lv){
@@ -2134,25 +2134,25 @@ class Snake{
 
     ctx.save();ctx.translate(hp.x,hp.y);ctx.rotate(headAng);
 
-    // COBRA HOOD (levels 5+)
+    // COBRA HOOD (levels 5+) — a subtle flare behind the head, not a separate oversized blob
     if(form.eyeStyle==='cobra'){
       ctx.beginPath();
-      ctx.ellipse(0,0,hr*1.6,hr*1.2,0,0,Math.PI*2);
+      ctx.ellipse(0,0,hr*1.22,hr*.92,0,0,Math.PI*2);
       ctx.fillStyle='rgba(0,0,0,.35)';ctx.fill();
       ctx.beginPath();
-      ctx.ellipse(0,0,hr*1.55,hr*1.15,0,0,Math.PI*2);
-      const hoodG=ctx.createRadialGradient(0,0,0,0,0,hr*1.5);
+      ctx.ellipse(0,0,hr*1.18,hr*.88,0,0,Math.PI*2);
+      const hoodG=ctx.createRadialGradient(0,0,0,0,0,hr*1.15);
       hoodG.addColorStop(0,lh(this.col,20));
       hoodG.addColorStop(.6,this.col);
       hoodG.addColorStop(1,'rgba(0,0,0,.5)');
       ctx.fillStyle=hoodG;ctx.fill();
       // Hood pattern
       for(let hp2=0;hp2<3;hp2++){
-        ctx.beginPath();ctx.ellipse(0,hr*(.3+hp2*.35),hr*.6,hr*.15,0,0,Math.PI*2);
+        ctx.beginPath();ctx.ellipse(0,hr*(.24+hp2*.26),hr*.42,hr*.12,0,0,Math.PI*2);
         ctx.fillStyle='rgba(0,0,0,.2)';ctx.fill();
       }
       ctx.strokeStyle='rgba(0,0,0,.4)';ctx.lineWidth=zm;
-      ctx.beginPath();ctx.ellipse(0,0,hr*1.55,hr*1.15,0,0,Math.PI*2);ctx.stroke();
+      ctx.beginPath();ctx.ellipse(0,0,hr*1.18,hr*.88,0,0,Math.PI*2);ctx.stroke();
     }
     // Head shadow
     ctx.beginPath();ctx.ellipse(hr*.1,hr*.12,hr*1.12,hr*.82,0,0,Math.PI*2);
