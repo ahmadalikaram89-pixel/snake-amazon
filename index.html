@@ -3322,8 +3322,24 @@ function loop(ts){
   // Player input
   if(player&&player.alive){
     const dx=mX-canvas.width/2,dy=mY-canvas.height/2;
-    if(joystickActive)player.ta=joystickAngle;
-    else if(Math.abs(dx)>5||Math.abs(dy)>5)player.ta=Math.atan2(dy,dx);
+    let inputAngle=null;
+    if(joystickActive)inputAngle=joystickAngle;
+    else if(Math.abs(dx)>5||Math.abs(dy)>5)inputAngle=Math.atan2(dy,dx);
+    if(inputAngle!==null){
+      if(THREED_BIOMES.has(currentBiome.id)){
+        // The 2D top-down camera never rotates, so a screen angle IS the
+        // world angle. The 3D chase camera rotates to follow the snake's
+        // own heading, so that stops being true — "push right" no longer
+        // consistently turns right on screen once the view itself is
+        // turning too, which is exactly the "joystick feels off" report.
+        // Treat the input as relative to the snake's current heading
+        // instead: stick/mouse "up" (angle -90°) continues straight
+        // ahead, deflection left/right turns relative to what's on screen.
+        player.ta=player.angle+(inputAngle+Math.PI/2);
+      }else{
+        player.ta=inputAngle;
+      }
+    }
     if(keys['ArrowRight'])player.ta=0;if(keys['ArrowDown'])player.ta=Math.PI/2;
     if(keys['ArrowLeft'])player.ta=Math.PI;if(keys['ArrowUp'])player.ta=-Math.PI/2;
     if(keys['q']&&!keys._qu){player.actSpecial(now);keys._qu=true;}
