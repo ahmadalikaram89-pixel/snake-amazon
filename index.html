@@ -946,11 +946,12 @@ function shuffleBiomeOrder(){
 // first time a match enters it. Biomes not in THREED_BIOMES keep using the
 // original 2D canvas path untouched.
 // ═══════════════════════════════════════════
-const THREED_BIOMES=new Set(['nyc','jungle']);
+const THREED_BIOMES=new Set(['nyc','jungle','ocean']);
 let TD=null;            // shared: {THREE,BufferGeometryUtils,renderer,camera,lastW,lastH}
 let tdLoadPromise=null;
 let NYC=null;            // {scene,offX,offY,obstacles,segInst,preyPool,taxis,camInit}
 let JUNGLE=null;         // {scene,offX,offY,obstacles,segInst,preyPool,camInit}
+let OCEAN=null;          // {scene,offX,offY,obstacles,segInst,preyPool,fish,camInit}
 
 function ensure3D(){
   if(TD)return Promise.resolve(TD);
@@ -1031,10 +1032,12 @@ function make3DActorMeshes(THREE,scene){
 function build3DBiome(biomeId){
   if(biomeId==='nyc')buildNYCCityOnce();
   else if(biomeId==='jungle')buildJungleWorldOnce();
+  else if(biomeId==='ocean')buildOceanWorldOnce();
 }
 function get3D(biomeId){
   if(biomeId==='nyc')return NYC;
   if(biomeId==='jungle')return JUNGLE;
+  if(biomeId==='ocean')return OCEAN;
   return null;
 }
 
@@ -1292,6 +1295,107 @@ function buildJungleWorldOnce(){
   Object.assign(JUNGLE,make3DActorMeshes(THREE,scene));
 }
 
+// Builds the ocean floor once: heavy blue fog and dim cool lighting for an
+// underwater feel, coral clumps as solid circular obstacles (same role as
+// jungle trees / NYC buildings), decorative rock clusters, and small fish
+// schools cruising the seafloor (the ocean's answer to NYC's taxis).
+function buildOceanWorldOnce(){
+  if(OCEAN)return;
+  const {THREE}=TD;
+  const scene=new THREE.Scene();
+  scene.background=new THREE.Color(0x041c30);
+  scene.fog=new THREE.FogExp2(0x0a2c44,0.0026);
+  scene.add(new THREE.HemisphereLight(0x3a8ab0,0x041824,1.9));
+  scene.add(new THREE.AmbientLight(0x1a5570,1.6));
+  const sunshaft=new THREE.DirectionalLight(0x9fd8ff,0.9);
+  sunshaft.position.set(150,700,100);
+  scene.add(sunshaft);
+
+  OCEAN={scene,offX:WW/2,offY:WH/2,obstacles:[],fish:[],camInit:false};
+
+  function seafloorTexture(){
+    const c=document.createElement('canvas');c.width=128;c.height=128;
+    const g=c.getContext('2d');
+    g.fillStyle='#8a7a52';g.fillRect(0,0,128,128);
+    const patches=['#7a6a46','#93875e','#6e5f3e','#a0925f'];
+    for(let i=0;i<240;i++){
+      const x=Math.random()*128,y=Math.random()*128,r=1.5+Math.random()*8;
+      g.fillStyle=patches[i%patches.length];g.globalAlpha=0.3+Math.random()*0.3;
+      g.beginPath();g.arc(x,y,r,0,Math.PI*2);g.fill();
+    }
+    g.globalAlpha=1;
+    const tex=new THREE.CanvasTexture(c);
+    tex.wrapS=tex.wrapT=THREE.RepeatWrapping;tex.repeat.set(WW/128,WH/128);
+    return tex;
+  }
+  const ground=new THREE.Mesh(new THREE.PlaneGeometry(WW,WH),new THREE.MeshStandardMaterial({map:seafloorTexture(),roughness:1}));
+  ground.rotation.x=-Math.PI/2;
+  scene.add(ground);
+
+  // Coral clumps: solid circular obstacles, several tapered "branches" of
+  // reef color radiating from a base — a rounded blob alone would read as a
+  // rock, the branches read as coral.
+  const coralColors=[0xff6b5a,0xff9a3c,0xc84fd8,0xffd23c,0xff5c9e];
+  const branchGeo=new THREE.ConeGeometry(1,1,6);
+  const coralRoot=new THREE.Group();
+  scene.add(coralRoot);
+  const NUM_CORAL=130;
+  for(let i=0;i<NUM_CORAL;i++){
+    const cx=rnd(120,WW-120), cz=rnd(120,WH-120);
+    const baseR=rnd(14,26);
+    const clump=new THREE.Group();
+    clump.position.set(cx-OCEAN.offX,0,cz-OCEAN.offY);
+    const branchCount=ri(4,7);
+    const col=coralColors[i%coralColors.length];
+    for(let b=0;b<branchCount;b++){
+      const bh=rnd(18,38), br=rnd(3,6);
+      const mat=new THREE.MeshStandardMaterial({color:col,emissive:col,emissiveIntensity:0.35,roughness:0.7});
+      const branch=new THREE.Mesh(branchGeo,mat);
+      branch.scale.set(br,bh,br);
+      const ba=Math.random()*Math.PI*2, bd=Math.random()*baseR*0.6;
+      branch.position.set(Math.cos(ba)*bd,bh/2,Math.sin(ba)*bd);
+      branch.rotation.z=rnd(-0.3,0.3);branch.rotation.x=rnd(-0.3,0.3);
+      clump.add(branch);
+    }
+    coralRoot.add(clump);
+    OCEAN.obstacles.push({shape:'circle',x:cx,y:cz,radius:baseR+8});
+  }
+
+  // Rocks: decorative only, not part of collision.
+  const rockGeo=new THREE.IcosahedronGeometry(1,0);
+  for(let i=0;i<70;i++){
+    const rx=rnd(100,WW-100), rz=rnd(100,WH-100);
+    const rMat=new THREE.MeshStandardMaterial({color:0x555a52,roughness:0.95});
+    const rock=new THREE.Mesh(rockGeo,rMat);
+    const rr=rnd(8,20);
+    rock.scale.set(rr,rr*rnd(0.6,0.9),rr);
+    rock.rotation.set(Math.random()*Math.PI,Math.random()*Math.PI,Math.random()*Math.PI);
+    rock.position.set(rx-OCEAN.offX,rr*0.3,rz-OCEAN.offY);
+    scene.add(rock);
+  }
+
+  // Fish schools: small cruising decorations, same wrap-at-edge idea as NYC
+  // taxis but drifting in loose wandering paths instead of straight streets.
+  function makeFish(){
+    const g=new THREE.Group();
+    const body=new THREE.Mesh(new THREE.ConeGeometry(1,1,4),new THREE.MeshStandardMaterial({color:[0xffaa33,0x66ccff,0xff6688][ri(0,2)],roughness:0.4,metalness:0.2}));
+    body.scale.set(3,3,7);
+    body.rotation.x=Math.PI/2;
+    g.add(body);
+    return g;
+  }
+  for(let i=0;i<16;i++){
+    const f=makeFish();
+    const fx=rnd(150,WW-150), fz=rnd(150,WH-150);
+    f.position.set(fx-OCEAN.offX,rnd(15,45),fz-OCEAN.offY);
+    f.userData={angle:Math.random()*Math.PI*2,speed:20+Math.random()*30,turnT:Math.random()*Math.PI*2};
+    scene.add(f);
+    OCEAN.fish.push(f);
+  }
+
+  Object.assign(OCEAN,make3DActorMeshes(THREE,scene));
+}
+
 function show3D(){
   document.getElementById('gc').style.display='none';
   document.getElementById('gc3d').style.display='block';
@@ -1326,6 +1430,24 @@ function render3DFrame(now,dt){
         if(t.position.z>half+20)t.position.z=-half-20;
         if(t.position.z<-half-20)t.position.z=half+20;
       }
+    }
+  }
+
+  // Ocean-only decoration: fish drift in loose wandering paths, gently
+  // steering rather than following a fixed street.
+  if(currentBiome.id==='ocean'){
+    const half=WW/2;
+    for(const f of st.fish){
+      const d=f.userData;
+      d.turnT+=dt;
+      d.angle+=Math.sin(d.turnT*0.6)*dt*0.8;
+      f.position.x+=Math.cos(d.angle)*d.speed*dt;
+      f.position.z+=Math.sin(d.angle)*d.speed*dt;
+      f.rotation.y=Math.PI/2-d.angle;
+      if(f.position.x>half)f.position.x=-half;
+      if(f.position.x<-half)f.position.x=half;
+      if(f.position.z>half)f.position.z=-half;
+      if(f.position.z<-half)f.position.z=half;
     }
   }
 
