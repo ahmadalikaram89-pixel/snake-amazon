@@ -990,25 +990,33 @@ function getEmojiTexture(THREE,emoji){
   return tex;
 }
 
-// A repeating scale/ring pattern tiled along the body ribbon's length — a
-// white base (so material.color tints it per-snake) with a darker band, so
-// it reads as the classic snake's ringed scale pattern instead of a flat
-// solid strip.
+// A repeating reptile scale pattern tiled both across the body's width and
+// along its length — small overlapping scallop shapes in a brick-offset
+// grid, like the logo's snake — instead of a flat solid strip. White base
+// so material.color still tints it per-snake/per-evolution-tier.
 let _bodyRingTex=null;
 function getBodyRingTexture(THREE){
   if(_bodyRingTex)return _bodyRingTex;
-  // Anaconda-style alternating blotches — two per tile, offset side to
-  // side down the spine — instead of a single plain center band, for a
-  // denser, more spotted look.
-  const c=document.createElement('canvas');c.width=32;c.height=96;
+  const c=document.createElement('canvas');c.width=48;c.height=48;
   const g=c.getContext('2d');
-  g.fillStyle='#ffffff';g.fillRect(0,0,32,96);
-  g.fillStyle='rgba(0,0,0,0.34)';
-  g.beginPath();g.ellipse(9,28,10,15,0,0,Math.PI*2);g.fill();
-  g.beginPath();g.ellipse(23,76,10,15,0,0,Math.PI*2);g.fill();
+  g.fillStyle='#ffffff';g.fillRect(0,0,48,48);
+  g.fillStyle='rgba(0,0,0,0.22)';
+  g.strokeStyle='rgba(0,0,0,0.5)';
+  g.lineWidth=1.6;
+  const rows=3, sw=24, sh=16;
+  for(let row=-1;row<=rows;row++){
+    const offsetX=(row%2===0)?0:sw/2;
+    for(let col=-1;col<=2;col++){
+      const cx=col*sw+offsetX, cy=row*sh+sh/2;
+      g.beginPath();
+      g.arc(cx,cy,sw*0.55,0.12*Math.PI,0.88*Math.PI);
+      g.fill();g.stroke();
+    }
+  }
   const tex=new THREE.CanvasTexture(c);
-  tex.wrapS=THREE.ClampToEdgeWrapping;
+  tex.wrapS=THREE.RepeatWrapping;
   tex.wrapT=THREE.RepeatWrapping;
+  tex.repeat.set(2,1);
   return _bodyRingTex=tex;
 }
 
@@ -1042,7 +1050,7 @@ function make3DActorMeshes(THREE,scene){
     geo.setAttribute('normal',new THREE.BufferAttribute(normals,3).setUsage(THREE.DynamicDrawUsage));
     geo.setIndex(bodyIndices);
     geo.setDrawRange(0,0);
-    const mat=new THREE.MeshStandardMaterial({roughness:0.6,side:THREE.DoubleSide,map:bodyRingTex});
+    const mat=new THREE.MeshStandardMaterial({roughness:0.4,side:THREE.DoubleSide,map:bodyRingTex});
     const mesh=new THREE.Mesh(geo,mat);
     mesh.visible=false;
     mesh.frustumCulled=false;
@@ -1949,7 +1957,7 @@ function render3DFrame(now,dt){
     const arr=posAttr.array;
     const uvAttr=mesh.geometry.attributes.uv;
     const uvArr=uvAttr.array;
-    const RING_SPACING=rad*2.0;
+    const RING_SPACING=rad*0.9;
     // Taper the last few points down toward a point instead of ending in a
     // hard flat cut — a constant-width ribbon just stops dead at the tail,
     // which reads as "clipped off" rather than a natural tapering tip.
