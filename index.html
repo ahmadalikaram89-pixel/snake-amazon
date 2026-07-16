@@ -997,11 +997,15 @@ function getEmojiTexture(THREE,emoji){
 let _bodyRingTex=null;
 function getBodyRingTexture(THREE){
   if(_bodyRingTex)return _bodyRingTex;
-  const c=document.createElement('canvas');c.width=32;c.height=64;
+  // Anaconda-style alternating blotches — two per tile, offset side to
+  // side down the spine — instead of a single plain center band, for a
+  // denser, more spotted look.
+  const c=document.createElement('canvas');c.width=32;c.height=96;
   const g=c.getContext('2d');
-  g.fillStyle='#ffffff';g.fillRect(0,0,32,64);
-  g.fillStyle='rgba(0,0,0,0.32)';
-  g.beginPath();g.ellipse(16,58,15,8,0,0,Math.PI*2);g.fill();
+  g.fillStyle='#ffffff';g.fillRect(0,0,32,96);
+  g.fillStyle='rgba(0,0,0,0.34)';
+  g.beginPath();g.ellipse(9,28,10,15,0,0,Math.PI*2);g.fill();
+  g.beginPath();g.ellipse(23,76,10,15,0,0,Math.PI*2);g.fill();
   const tex=new THREE.CanvasTexture(c);
   tex.wrapS=THREE.ClampToEdgeWrapping;
   tex.wrapT=THREE.RepeatWrapping;
@@ -1939,7 +1943,7 @@ function render3DFrame(now,dt){
     const arr=posAttr.array;
     const uvAttr=mesh.geometry.attributes.uv;
     const uvArr=uvAttr.array;
-    const RING_SPACING=rad*3.2;
+    const RING_SPACING=rad*2.0;
     // Taper the last few points down toward a point instead of ending in a
     // hard flat cut — a constant-width ribbon just stops dead at the tail,
     // which reads as "clipped off" rather than a natural tapering tip.
