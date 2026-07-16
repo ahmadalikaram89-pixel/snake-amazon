@@ -785,7 +785,7 @@ const WW=3200,WH=3200;
 const SEG_DIST=8;
 const BASE_SPEED=3.2;
 let TOTAL_PLAYERS=8; // scales up with account level, see getDifficultyT()
-const PREY_COUNT=60;
+const PREY_COUNT=100;
 // 0..1, ramps up with account (meta) level so returning players face a harder game
 let AI_DIFF=0;
 function getDifficultyT(){return Math.min(1,((stats.level||1)-1)/29);}
@@ -949,8 +949,8 @@ function shuffleBiomeOrder(){
 const THREED_BIOMES=new Set(['nyc','jungle']);
 let TD=null;            // shared: {THREE,BufferGeometryUtils,renderer,camera,lastW,lastH}
 let tdLoadPromise=null;
-let NYC=null;            // {scene,offX,offY,obstacles,segInst,preyInst,taxis,camInit}
-let JUNGLE=null;         // {scene,offX,offY,obstacles,segInst,preyInst,camInit}
+let NYC=null;            // {scene,offX,offY,obstacles,segInst,preyPool,taxis,camInit}
+let JUNGLE=null;         // {scene,offX,offY,obstacles,segInst,preyPool,camInit}
 
 function ensure3D(){
   if(TD)return Promise.resolve(TD);
@@ -970,15 +970,40 @@ function ensure3D(){
 
 // Creates the instanced meshes every 3D biome uses to draw snakes/prey from
 // their real live positions (one draw call each instead of one per segment).
+// Prey emoji -> canvas texture, cached once and reused by every prey sprite
+// across every 3D biome (a handful of distinct emoji total, regardless of
+// how many prey are on screen).
+const _emojiTexCache={};
+function getEmojiTexture(THREE,emoji){
+  let tex=_emojiTexCache[emoji];
+  if(tex)return tex;
+  const c=document.createElement('canvas');c.width=64;c.height=64;
+  const g=c.getContext('2d');
+  g.font='46px serif';g.textAlign='center';g.textBaseline='middle';
+  g.fillText(emoji,32,34);
+  tex=new THREE.CanvasTexture(c);
+  _emojiTexCache[emoji]=tex;
+  return tex;
+}
+
 function make3DActorMeshes(THREE,scene){
   const MAX_SEGS=420;
   const segInst=new THREE.InstancedMesh(new THREE.SphereGeometry(1,10,10),new THREE.MeshStandardMaterial({roughness:0.5}),MAX_SEGS);
   segInst.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   scene.add(segInst);
-  const MAX_PREY=160;
-  const preyInst=new THREE.InstancedMesh(new THREE.SphereGeometry(1,8,8),new THREE.MeshStandardMaterial({roughness:0.6,emissive:0x222222}),MAX_PREY);
-  preyInst.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  scene.add(preyInst);
+
+  // Prey render as billboarded emoji sprites (always face the camera) instead
+  // of plain colored balls — the actual rabbit/fish/taxi/etc. icon shows up
+  // clearly instead of an undifferentiated blob, matching the 2D biomes'
+  // look. A pool sized above PREY_COUNT, reused/repositioned every frame.
+  const MAX_PREY=140, preyPool=[];
+  for(let i=0;i<MAX_PREY;i++){
+    const mat=new THREE.SpriteMaterial({transparent:true});
+    const sprite=new THREE.Sprite(mat);
+    sprite.visible=false;
+    scene.add(sprite);
+    preyPool.push(sprite);
+  }
 
   // A pool of real head meshes (flattened/elongated + two eyes) on top of the
   // instanced body — a uniform chain of spheres reads as a worm, not a
@@ -1000,7 +1025,7 @@ function make3DActorMeshes(THREE,scene){
     scene.add(g);
     headPool.push({group:g,mat:headMat});
   }
-  return {segInst,preyInst,headPool};
+  return {segInst,preyPool,headPool};
 }
 
 function build3DBiome(biomeId){
@@ -1344,17 +1369,17 @@ function render3DFrame(now,dt){
 
   let pi=0;
   for(const p of preyItems){
-    if(pi>=160)break;
-    m.makeScale(p.r,p.r,p.r);
-    m.setPosition(p.x-st.offX,p.r,p.y-st.offY);
-    st.preyInst.setMatrixAt(pi,m);
-    col.set(p.scared?'#ff8844':p.c);
-    st.preyInst.setColorAt(pi,col);
-    pi++;
+    if(pi>=st.preyPool.length)break;
+    const sprite=st.preyPool[pi++];
+    sprite.visible=true;
+    sprite.material.map=getEmojiTexture(THREE,p.e);
+    sprite.material.color.set(p.scared?0xff8844:0xffffff);
+    sprite.material.needsUpdate=true;
+    const size=p.r*2.4;
+    sprite.scale.set(size,size,1);
+    sprite.position.set(p.x-st.offX,p.r*1.3,p.y-st.offY);
   }
-  st.preyInst.count=pi;
-  st.preyInst.instanceMatrix.needsUpdate=true;
-  if(st.preyInst.instanceColor)st.preyInst.instanceColor.needsUpdate=true;
+  for(;pi<st.preyPool.length;pi++)st.preyPool[pi].visible=false;
 
   // Real head meshes on top of the instanced body, oriented to face each
   // snake's current heading.
