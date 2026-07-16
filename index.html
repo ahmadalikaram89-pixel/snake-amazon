@@ -3655,20 +3655,31 @@ function loop(ts){
     // in 3D; falling back to "no new input" (keep the current heading) is
     // correct there, not stale-mouse steering.
     else if(!in3D&&(Math.abs(dx)>5||Math.abs(dy)>5))inputAngle=Math.atan2(dy,dx);
-    if(inputAngle!==null){
-      if(in3D){
-        // The 2D top-down camera never rotates, so a screen angle IS the
-        // world angle. The 3D chase camera rotates to follow the snake's
-        // own heading, so that stops being true — "push right" no longer
-        // consistently turns right on screen once the view itself is
-        // turning too, which is exactly the "joystick feels off" report.
-        // Treat the input as relative to the snake's current heading
-        // instead: stick/mouse "up" (angle -90°) continues straight
-        // ahead, deflection left/right turns relative to what's on screen.
-        player.ta=player.angle+(inputAngle+Math.PI/2);
-      }else{
-        player.ta=inputAngle;
+    if(in3D){
+      // The 2D top-down camera never rotates, so a screen angle IS the
+      // world angle. The 3D chase camera rotates to follow the snake's own
+      // heading, so that stops being true — "push right" no longer
+      // consistently turns right on screen once the view itself is turning
+      // too. Recomputing player.ta as player.angle+offset every frame (the
+      // old approach) is a runaway integrator: da=ta-angle always equals
+      // that fixed offset no matter how far the snake has already turned,
+      // so this.angle+=da*0.22 adds the SAME increment every single frame
+      // forever — a constant-rate spin for as long as any offset is held,
+      // which for a thumb on a stick is basically always (hence "spins the
+      // instant I touch it"). Instead treat the sideways deflection as a
+      // turn RATE and integrate it into the heading directly, scaled by
+      // real elapsed time and how far the stick is actually pushed, so a
+      // light nudge barely turns and centering the stick stops turning.
+      if(joystickActive&&joystickMag>0.05){
+        let rel=joystickAngle+Math.PI/2;
+        rel=Math.atan2(Math.sin(rel),Math.cos(rel));
+        const norm=Math.max(-1,Math.min(1,rel/(Math.PI*0.75)));
+        const maxTurnRate=3.4;
+        player.angle+=norm*maxTurnRate*joystickMag*(dt/1000);
       }
+      player.ta=player.angle;
+    }else if(inputAngle!==null){
+      player.ta=inputAngle;
     }
     if(keys['ArrowRight'])player.ta=0;if(keys['ArrowDown'])player.ta=Math.PI/2;
     if(keys['ArrowLeft'])player.ta=Math.PI;if(keys['ArrowUp'])player.ta=-Math.PI/2;
@@ -3728,7 +3739,7 @@ function loop(ts){
 // ═══════════════════════════════════════════
 // INPUT
 // ═══════════════════════════════════════════
-let joystickActive=false,joystickAngle=0;
+let joystickActive=false,joystickAngle=-Math.PI/2,joystickMag=0;
 window.addEventListener('mousemove',e=>{mX=e.clientX;mY=e.clientY;});
 window.addEventListener('touchmove',e=>{e.preventDefault();if(!joystickActive){mX=e.touches[0].clientX;mY=e.touches[0].clientY;}},{passive:false});
 // Right side tap = move direction (no joystick needed)
@@ -3752,9 +3763,9 @@ const joyOuter=document.getElementById('joyOuter');
 const joyInner=document.getElementById('joyInner');
 if(joyOuter){
   let joyStart={x:0,y:0};
-  joyOuter.addEventListener('touchstart',e=>{e.preventDefault();joystickActive=true;const r=joyOuter.getBoundingClientRect();joyStart={x:r.left+r.width/2,y:r.top+r.height/2};},{passive:false});
-  joyOuter.addEventListener('touchmove',e=>{e.preventDefault();const t=e.touches[0];const dx=t.clientX-joyStart.x,dy=t.clientY-joyStart.y;const dist=Math.hypot(dx,dy);const maxD=38;const cx2=Math.cos(Math.atan2(dy,dx))*Math.min(dist,maxD);const cy2=Math.sin(Math.atan2(dy,dx))*Math.min(dist,maxD);joyInner.style.left=(50+cx2/maxD*38)+'%';joyInner.style.top=(50+cy2/maxD*38)+'%';joystickAngle=Math.atan2(dy,dx);},{passive:false});
-  joyOuter.addEventListener('touchend',()=>{joystickActive=false;joyInner.style.left='50%';joyInner.style.top='50%';});
+  joyOuter.addEventListener('touchstart',e=>{e.preventDefault();joystickActive=true;joystickMag=0;joystickAngle=-Math.PI/2;const r=joyOuter.getBoundingClientRect();joyStart={x:r.left+r.width/2,y:r.top+r.height/2};},{passive:false});
+  joyOuter.addEventListener('touchmove',e=>{e.preventDefault();const t=e.touches[0];const dx=t.clientX-joyStart.x,dy=t.clientY-joyStart.y;const dist=Math.hypot(dx,dy);const maxD=38;const cx2=Math.cos(Math.atan2(dy,dx))*Math.min(dist,maxD);const cy2=Math.sin(Math.atan2(dy,dx))*Math.min(dist,maxD);joyInner.style.left=(50+cx2/maxD*38)+'%';joyInner.style.top=(50+cy2/maxD*38)+'%';joystickAngle=Math.atan2(dy,dx);joystickMag=Math.min(dist,maxD)/maxD;},{passive:false});
+  joyOuter.addEventListener('touchend',()=>{joystickActive=false;joystickMag=0;joyInner.style.left='50%';joyInner.style.top='50%';});
 }
 
 // Ability taps (mobile)
