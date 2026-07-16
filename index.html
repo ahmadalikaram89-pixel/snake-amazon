@@ -785,7 +785,7 @@ const WW=3200,WH=3200;
 const SEG_DIST=8;
 const BASE_SPEED=3.2;
 let TOTAL_PLAYERS=8; // scales up with account level, see getDifficultyT()
-const PREY_COUNT=100;
+const PREY_COUNT=180;
 // 0..1, ramps up with account (meta) level so returning players face a harder game
 let AI_DIFF=0;
 function getDifficultyT(){return Math.min(1,((stats.level||1)-1)/29);}
@@ -1062,7 +1062,7 @@ function make3DActorMeshes(THREE,scene){
   // of plain colored balls — the actual rabbit/fish/taxi/etc. icon shows up
   // clearly instead of an undifferentiated blob, matching the 2D biomes'
   // look. A pool sized above PREY_COUNT, reused/repositioned every frame.
-  const MAX_PREY=140, preyPool=[];
+  const MAX_PREY=240, preyPool=[];
   for(let i=0;i<MAX_PREY;i++){
     const mat=new THREE.SpriteMaterial({transparent:true});
     const sprite=new THREE.Sprite(mat);
@@ -2067,7 +2067,7 @@ function render3DFrame(now,dt){
   if(player&&player.alive){
     const hx=player.head.x-st.offX, hz=player.head.y-st.offY;
     const ang=player.angle;
-    const dist=195+player.rad*4.5, height=390+player.rad*9;
+    const dist=270+player.rad*5.5, height=520+player.rad*11;
     const desiredX=hx-Math.cos(ang)*dist, desiredZ=hz-Math.sin(ang)*dist, desiredY=height;
     if(!st.camInit){
       camera.position.set(desiredX,desiredY,desiredZ);
@@ -4059,8 +4059,13 @@ function loop(ts){
       if(joystickActive&&joystickMag>0.05){
         let rel=joystickAngle+Math.PI/2;
         rel=Math.atan2(Math.sin(rel),Math.cos(rel));
-        const norm=Math.max(-1,Math.min(1,rel/(Math.PI*0.75)));
-        const maxTurnRate=3.4;
+        // Full deflection to either side (90° off from straight) now hits
+        // max turn rate, and that rate is much higher, so holding the stick
+        // to one side pulls the snake through a tight, fast loop instead of
+        // a wide sluggish arc — closer to how a real snake can curl around
+        // on itself.
+        const norm=Math.max(-1,Math.min(1,rel/(Math.PI/2)));
+        const maxTurnRate=6.5;
         player.angle+=norm*maxTurnRate*joystickMag*(dt/1000);
       }
       player.ta=player.angle;
