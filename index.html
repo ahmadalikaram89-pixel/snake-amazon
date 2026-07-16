@@ -785,7 +785,7 @@ const WW=3200,WH=3200;
 const SEG_DIST=8;
 const BASE_SPEED=3.2;
 let TOTAL_PLAYERS=8; // scales up with account level, see getDifficultyT()
-const PREY_COUNT=60;
+const PREY_COUNT=100;
 // 0..1, ramps up with account (meta) level so returning players face a harder game
 let AI_DIFF=0;
 function getDifficultyT(){return Math.min(1,((stats.level||1)-1)/29);}
@@ -946,11 +946,13 @@ function shuffleBiomeOrder(){
 // first time a match enters it. Biomes not in THREED_BIOMES keep using the
 // original 2D canvas path untouched.
 // ═══════════════════════════════════════════
-const THREED_BIOMES=new Set(['nyc','jungle']);
+const THREED_BIOMES=new Set(['nyc','jungle','ocean','desert']);
 let TD=null;            // shared: {THREE,BufferGeometryUtils,renderer,camera,lastW,lastH}
 let tdLoadPromise=null;
-let NYC=null;            // {scene,offX,offY,obstacles,segInst,preyInst,taxis,camInit}
-let JUNGLE=null;         // {scene,offX,offY,obstacles,segInst,preyInst,camInit}
+let NYC=null;            // {scene,offX,offY,obstacles,segInst,preyPool,taxis,camInit}
+let JUNGLE=null;         // {scene,offX,offY,obstacles,segInst,preyPool,camInit}
+let OCEAN=null;          // {scene,offX,offY,obstacles,segInst,preyPool,fish,camInit}
+let DESERT=null;         // {scene,offX,offY,obstacles,segInst,preyPool,tumbleweeds,camInit}
 
 function ensure3D(){
   if(TD)return Promise.resolve(TD);
@@ -970,15 +972,40 @@ function ensure3D(){
 
 // Creates the instanced meshes every 3D biome uses to draw snakes/prey from
 // their real live positions (one draw call each instead of one per segment).
+// Prey emoji -> canvas texture, cached once and reused by every prey sprite
+// across every 3D biome (a handful of distinct emoji total, regardless of
+// how many prey are on screen).
+const _emojiTexCache={};
+function getEmojiTexture(THREE,emoji){
+  let tex=_emojiTexCache[emoji];
+  if(tex)return tex;
+  const c=document.createElement('canvas');c.width=64;c.height=64;
+  const g=c.getContext('2d');
+  g.font='46px serif';g.textAlign='center';g.textBaseline='middle';
+  g.fillText(emoji,32,34);
+  tex=new THREE.CanvasTexture(c);
+  _emojiTexCache[emoji]=tex;
+  return tex;
+}
+
 function make3DActorMeshes(THREE,scene){
   const MAX_SEGS=420;
   const segInst=new THREE.InstancedMesh(new THREE.SphereGeometry(1,10,10),new THREE.MeshStandardMaterial({roughness:0.5}),MAX_SEGS);
   segInst.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   scene.add(segInst);
-  const MAX_PREY=160;
-  const preyInst=new THREE.InstancedMesh(new THREE.SphereGeometry(1,8,8),new THREE.MeshStandardMaterial({roughness:0.6,emissive:0x222222}),MAX_PREY);
-  preyInst.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  scene.add(preyInst);
+
+  // Prey render as billboarded emoji sprites (always face the camera) instead
+  // of plain colored balls — the actual rabbit/fish/taxi/etc. icon shows up
+  // clearly instead of an undifferentiated blob, matching the 2D biomes'
+  // look. A pool sized above PREY_COUNT, reused/repositioned every frame.
+  const MAX_PREY=140, preyPool=[];
+  for(let i=0;i<MAX_PREY;i++){
+    const mat=new THREE.SpriteMaterial({transparent:true});
+    const sprite=new THREE.Sprite(mat);
+    sprite.visible=false;
+    scene.add(sprite);
+    preyPool.push(sprite);
+  }
 
   // A pool of real head meshes (flattened/elongated + two eyes) on top of the
   // instanced body — a uniform chain of spheres reads as a worm, not a
@@ -1000,16 +1027,20 @@ function make3DActorMeshes(THREE,scene){
     scene.add(g);
     headPool.push({group:g,mat:headMat});
   }
-  return {segInst,preyInst,headPool};
+  return {segInst,preyPool,headPool};
 }
 
 function build3DBiome(biomeId){
   if(biomeId==='nyc')buildNYCCityOnce();
   else if(biomeId==='jungle')buildJungleWorldOnce();
+  else if(biomeId==='ocean')buildOceanWorldOnce();
+  else if(biomeId==='desert')buildDesertWorldOnce();
 }
 function get3D(biomeId){
   if(biomeId==='nyc')return NYC;
   if(biomeId==='jungle')return JUNGLE;
+  if(biomeId==='ocean')return OCEAN;
+  if(biomeId==='desert')return DESERT;
   return null;
 }
 
@@ -1021,9 +1052,9 @@ function buildNYCCityOnce(){
   const scene=new THREE.Scene();
   scene.background=new THREE.Color(0x0d1730);
   scene.fog=new THREE.FogExp2(0x0d1730,0.0035);
-  scene.add(new THREE.HemisphereLight(0x3a5580,0x181410,1.6));
-  scene.add(new THREE.AmbientLight(0x2a3a55,1.5));
-  const moon=new THREE.DirectionalLight(0x9fc0ff,1.2);
+  scene.add(new THREE.HemisphereLight(0x4a70a8,0x181410,2.1));
+  scene.add(new THREE.AmbientLight(0x3a5075,2.0));
+  const moon=new THREE.DirectionalLight(0x9fc0ff,1.6);
   moon.position.set(-400,600,-300);
   scene.add(moon);
 
@@ -1186,9 +1217,9 @@ function buildJungleWorldOnce(){
   const scene=new THREE.Scene();
   scene.background=new THREE.Color(0x0a1408);
   scene.fog=new THREE.FogExp2(0x0a1408,0.0028);
-  scene.add(new THREE.HemisphereLight(0x5a8a3a,0x1a2408,1.7));
-  scene.add(new THREE.AmbientLight(0x24401a,1.3));
-  const sun=new THREE.DirectionalLight(0xcfffb0,1.15);
+  scene.add(new THREE.HemisphereLight(0x7ab058,0x2a3810,2.6));
+  scene.add(new THREE.AmbientLight(0x3a5a28,2.0));
+  const sun=new THREE.DirectionalLight(0xd8ffc0,1.7);
   sun.position.set(350,600,200);
   scene.add(sun);
 
@@ -1240,31 +1271,275 @@ function buildJungleWorldOnce(){
     scene.add(river);
   }
 
-  // Trees: solid circular obstacles, trunk + canopy cluster.
-  const trunkGeo=new THREE.CylinderGeometry(1,1.3,1,8);
-  const canopyGeo=new THREE.SphereGeometry(1,9,8);
-  const canopyColors=[0x1f5c14,0x1a4a10,0x256a1a,0x184010];
+  // Palm trees: solid circular obstacles — a slightly leaning tapered trunk
+  // with a fan of drooping fronds at the top, instead of a generic
+  // trunk-and-round-canopy tree.
+  //
+  // The trunk mesh is scaled non-uniformly (thin in X/Z, tall in Y). Fronds
+  // used to be children of that trunk mesh — a rotated child inside a
+  // non-uniformly-scaled parent gets sheared/stretched by the parent's
+  // scale in world space, which turned each frond into a huge distorted
+  // wedge instead of a small plank (the "giant dark triangle filling the
+  // screen" bug reported from a real device). Give the crown its own
+  // unscaled group instead, positioned at the trunk's actual top, and hang
+  // the trunk mesh and the fronds off that as siblings.
+  const trunkGeo=new THREE.CylinderGeometry(0.6,1,1,8);
+  const frondGeo=new THREE.BoxGeometry(1,0.08,1);
+  const frondColors=[0x2f8a2a,0x358a34,0x2a7a28,0x3a9838];
   const treeRoot=new THREE.Group();
   scene.add(treeRoot);
   const NUM_TREES=150;
   for(let i=0;i<NUM_TREES;i++){
     const tx=rnd(120,WW-120), tz=rnd(120,WH-120);
-    const trunkH=rnd(30,58), trunkR=rnd(4,7);
-    const trunkMat=new THREE.MeshStandardMaterial({color:0x4a3218,roughness:0.95});
+    const trunkH=rnd(46,78), trunkR=rnd(3.5,5.5);
+    const lean=rnd(-0.12,0.12), lean2=rnd(-0.12,0.12);
+
+    const palm=new THREE.Group();
+    palm.position.set(tx-JUNGLE.offX,0,tz-JUNGLE.offY);
+    palm.rotation.z=lean;palm.rotation.x=lean2;
+
+    const trunkMat=new THREE.MeshStandardMaterial({color:0x8a6a3a,roughness:0.9});
     const trunk=new THREE.Mesh(trunkGeo,trunkMat);
     trunk.scale.set(trunkR,trunkH,trunkR);
-    trunk.position.set(tx-JUNGLE.offX,trunkH/2,tz-JUNGLE.offY);
-    const canopyR=rnd(20,36);
-    const canopyMat=new THREE.MeshStandardMaterial({color:canopyColors[i%canopyColors.length],roughness:0.9});
-    const canopy=new THREE.Mesh(canopyGeo,canopyMat);
-    canopy.scale.set(canopyR/trunkR,(canopyR*0.85)/trunkH,canopyR/trunkR);
-    canopy.position.y=1+((canopyR*0.55)/trunkH);
-    trunk.add(canopy);
-    treeRoot.add(trunk);
+    trunk.position.y=trunkH/2;
+    palm.add(trunk);
+
+    const crown=new THREE.Group();
+    crown.position.y=trunkH;
+    palm.add(crown);
+
+    const frondCount=ri(5,7);
+    const frondLen=rnd(26,40), frondW=frondLen*0.32;
+    const frondMat=new THREE.MeshStandardMaterial({color:frondColors[i%frondColors.length],roughness:0.85,side:THREE.DoubleSide});
+    for(let f=0;f<frondCount;f++){
+      const frond=new THREE.Mesh(frondGeo,frondMat);
+      frond.scale.set(frondW,1,frondLen);
+      // Fan out evenly around the crown, each drooping outward and down.
+      const fa=(f/frondCount)*Math.PI*2;
+      frond.rotation.y=fa;
+      frond.rotation.x=-Math.PI/2+0.55; // droop down from horizontal
+      frond.translateZ(frondLen*0.5);
+      crown.add(frond);
+    }
+    treeRoot.add(palm);
     JUNGLE.obstacles.push({shape:'circle',x:tx,y:tz,radius:trunkR+7});
   }
 
   Object.assign(JUNGLE,make3DActorMeshes(THREE,scene));
+}
+
+// Builds the ocean floor once: heavy blue fog and dim cool lighting for an
+// underwater feel, coral clumps as solid circular obstacles (same role as
+// jungle trees / NYC buildings), decorative rock clusters, and small fish
+// schools cruising the seafloor (the ocean's answer to NYC's taxis).
+function buildOceanWorldOnce(){
+  if(OCEAN)return;
+  const {THREE}=TD;
+  const scene=new THREE.Scene();
+  scene.background=new THREE.Color(0x041c30);
+  scene.fog=new THREE.FogExp2(0x0a2c44,0.0026);
+  scene.add(new THREE.HemisphereLight(0x4aa0c8,0x0a2c3c,2.4));
+  scene.add(new THREE.AmbientLight(0x2a7090,2.1));
+  const sunshaft=new THREE.DirectionalLight(0x9fd8ff,1.3);
+  sunshaft.position.set(150,700,100);
+  scene.add(sunshaft);
+
+  OCEAN={scene,offX:WW/2,offY:WH/2,obstacles:[],fish:[],camInit:false};
+
+  function seafloorTexture(){
+    const c=document.createElement('canvas');c.width=128;c.height=128;
+    const g=c.getContext('2d');
+    g.fillStyle='#8a7a52';g.fillRect(0,0,128,128);
+    const patches=['#7a6a46','#93875e','#6e5f3e','#a0925f'];
+    for(let i=0;i<240;i++){
+      const x=Math.random()*128,y=Math.random()*128,r=1.5+Math.random()*8;
+      g.fillStyle=patches[i%patches.length];g.globalAlpha=0.3+Math.random()*0.3;
+      g.beginPath();g.arc(x,y,r,0,Math.PI*2);g.fill();
+    }
+    g.globalAlpha=1;
+    const tex=new THREE.CanvasTexture(c);
+    tex.wrapS=tex.wrapT=THREE.RepeatWrapping;tex.repeat.set(WW/128,WH/128);
+    return tex;
+  }
+  const ground=new THREE.Mesh(new THREE.PlaneGeometry(WW,WH),new THREE.MeshStandardMaterial({map:seafloorTexture(),roughness:1}));
+  ground.rotation.x=-Math.PI/2;
+  scene.add(ground);
+
+  // Coral clumps: solid circular obstacles, several tapered "branches" of
+  // reef color radiating from a base — a rounded blob alone would read as a
+  // rock, the branches read as coral.
+  const coralColors=[0xff6b5a,0xff9a3c,0xc84fd8,0xffd23c,0xff5c9e];
+  const branchGeo=new THREE.ConeGeometry(1,1,6);
+  const coralRoot=new THREE.Group();
+  scene.add(coralRoot);
+  const NUM_CORAL=130;
+  for(let i=0;i<NUM_CORAL;i++){
+    const cx=rnd(120,WW-120), cz=rnd(120,WH-120);
+    const baseR=rnd(14,26);
+    const clump=new THREE.Group();
+    clump.position.set(cx-OCEAN.offX,0,cz-OCEAN.offY);
+    const branchCount=ri(4,7);
+    const col=coralColors[i%coralColors.length];
+    for(let b=0;b<branchCount;b++){
+      const bh=rnd(18,38), br=rnd(3,6);
+      const mat=new THREE.MeshStandardMaterial({color:col,emissive:col,emissiveIntensity:0.35,roughness:0.7});
+      const branch=new THREE.Mesh(branchGeo,mat);
+      branch.scale.set(br,bh,br);
+      const ba=Math.random()*Math.PI*2, bd=Math.random()*baseR*0.6;
+      branch.position.set(Math.cos(ba)*bd,bh/2,Math.sin(ba)*bd);
+      branch.rotation.z=rnd(-0.3,0.3);branch.rotation.x=rnd(-0.3,0.3);
+      clump.add(branch);
+    }
+    coralRoot.add(clump);
+    OCEAN.obstacles.push({shape:'circle',x:cx,y:cz,radius:baseR+8});
+  }
+
+  // Rocks: decorative only, not part of collision.
+  const rockGeo=new THREE.IcosahedronGeometry(1,0);
+  for(let i=0;i<70;i++){
+    const rx=rnd(100,WW-100), rz=rnd(100,WH-100);
+    const rMat=new THREE.MeshStandardMaterial({color:0x555a52,roughness:0.95});
+    const rock=new THREE.Mesh(rockGeo,rMat);
+    const rr=rnd(8,20);
+    rock.scale.set(rr,rr*rnd(0.6,0.9),rr);
+    rock.rotation.set(Math.random()*Math.PI,Math.random()*Math.PI,Math.random()*Math.PI);
+    rock.position.set(rx-OCEAN.offX,rr*0.3,rz-OCEAN.offY);
+    scene.add(rock);
+  }
+
+  // Fish schools: small cruising decorations, same wrap-at-edge idea as NYC
+  // taxis but drifting in loose wandering paths instead of straight streets.
+  function makeFish(){
+    const g=new THREE.Group();
+    const body=new THREE.Mesh(new THREE.ConeGeometry(1,1,4),new THREE.MeshStandardMaterial({color:[0xffaa33,0x66ccff,0xff6688][ri(0,2)],roughness:0.4,metalness:0.2}));
+    body.scale.set(3,3,7);
+    body.rotation.x=Math.PI/2;
+    g.add(body);
+    return g;
+  }
+  for(let i=0;i<16;i++){
+    const f=makeFish();
+    const fx=rnd(150,WW-150), fz=rnd(150,WH-150);
+    f.position.set(fx-OCEAN.offX,rnd(15,45),fz-OCEAN.offY);
+    f.userData={angle:Math.random()*Math.PI*2,speed:20+Math.random()*30,turnT:Math.random()*Math.PI*2};
+    scene.add(f);
+    OCEAN.fish.push(f);
+  }
+
+  Object.assign(OCEAN,make3DActorMeshes(THREE,scene));
+}
+
+// Builds the desert once: bright warm daylight and long clear sightlines
+// (a desert has nothing to hide behind, unlike a jungle canopy or ocean
+// fog), cacti as solid circular obstacles, decorative sun-bleached rocks,
+// and tumbleweeds rolling across the sand (the desert's answer to NYC's
+// taxis / ocean's fish).
+function buildDesertWorldOnce(){
+  if(DESERT)return;
+  const {THREE}=TD;
+  const scene=new THREE.Scene();
+  scene.background=new THREE.Color(0xd9a85c);
+  scene.fog=new THREE.FogExp2(0xd9a85c,0.0016);
+  scene.add(new THREE.HemisphereLight(0xfff0c0,0x8a6828,2.0));
+  scene.add(new THREE.AmbientLight(0x6a4a1a,1.1));
+  const sun=new THREE.DirectionalLight(0xfff4d0,1.6);
+  sun.position.set(300,700,-200);
+  scene.add(sun);
+
+  DESERT={scene,offX:WW/2,offY:WH/2,obstacles:[],tumbleweeds:[],camInit:false};
+
+  function sandTexture(){
+    const c=document.createElement('canvas');c.width=128;c.height=128;
+    const g=c.getContext('2d');
+    g.fillStyle='#c89858';g.fillRect(0,0,128,128);
+    const patches=['#b8863f','#d4a868','#a87830','#e0b878'];
+    for(let i=0;i<220;i++){
+      const x=Math.random()*128,y=Math.random()*128,r=1.5+Math.random()*9;
+      g.fillStyle=patches[i%patches.length];g.globalAlpha=0.3+Math.random()*0.3;
+      g.beginPath();g.arc(x,y,r,0,Math.PI*2);g.fill();
+    }
+    g.globalAlpha=1;
+    const tex=new THREE.CanvasTexture(c);
+    tex.wrapS=tex.wrapT=THREE.RepeatWrapping;tex.repeat.set(WW/128,WH/128);
+    return tex;
+  }
+  const ground=new THREE.Mesh(new THREE.PlaneGeometry(WW,WH),new THREE.MeshStandardMaterial({map:sandTexture(),roughness:1}));
+  ground.rotation.x=-Math.PI/2;
+  scene.add(ground);
+
+  // Low, wide dunes — decorative only, gentle rolling silhouette on the
+  // horizon rather than a hazard.
+  const duneGeo=new THREE.SphereGeometry(1,10,6);
+  for(let i=0;i<40;i++){
+    const dx=rnd(100,WW-100), dz=rnd(100,WH-100);
+    const dr=rnd(40,90);
+    const dune=new THREE.Mesh(duneGeo,new THREE.MeshStandardMaterial({color:0xc89858,roughness:1}));
+    dune.scale.set(dr,dr*0.22,dr);
+    dune.position.set(dx-DESERT.offX,-dr*0.12,dz-DESERT.offY);
+    scene.add(dune);
+  }
+
+  // Cacti: solid circular obstacles — trunk + one or two curved arms.
+  const trunkGeo=new THREE.CylinderGeometry(1,1.15,1,8);
+  const cactusColors=[0x3a7a2a,0x2f6a22,0x458a34];
+  const cactusRoot=new THREE.Group();
+  scene.add(cactusRoot);
+  const NUM_CACTI=110;
+  for(let i=0;i<NUM_CACTI;i++){
+    const cx=rnd(120,WW-120), cz=rnd(120,WH-120);
+    const trunkH=rnd(26,48), trunkR=rnd(5,8);
+    const col=cactusColors[i%cactusColors.length];
+    const mat=new THREE.MeshStandardMaterial({color:col,roughness:0.85});
+    const trunk=new THREE.Mesh(trunkGeo,mat);
+    trunk.scale.set(trunkR,trunkH,trunkR);
+    trunk.position.set(cx-DESERT.offX,trunkH/2,cz-DESERT.offY);
+    const armCount=ri(0,2);
+    for(let a=0;a<armCount;a++){
+      const armH=trunkH*rnd(0.3,0.5), armR=trunkR*0.55;
+      const arm=new THREE.Mesh(trunkGeo,mat);
+      arm.scale.set(armR,armH,armR);
+      const side=a===0?1:-1;
+      arm.position.set(side*trunkR*1.4,armH*0.15,0);
+      arm.rotation.z=side*0.5;
+      trunk.add(arm);
+    }
+    cactusRoot.add(trunk);
+    DESERT.obstacles.push({shape:'circle',x:cx,y:cz,radius:trunkR+8});
+  }
+
+  // Sun-bleached rocks — decorative only.
+  const rockGeo=new THREE.IcosahedronGeometry(1,0);
+  for(let i=0;i<50;i++){
+    const rx=rnd(100,WW-100), rz=rnd(100,WH-100);
+    const rock=new THREE.Mesh(rockGeo,new THREE.MeshStandardMaterial({color:0x9a8060,roughness:0.95}));
+    const rr=rnd(8,18);
+    rock.scale.set(rr,rr*rnd(0.6,0.9),rr);
+    rock.rotation.set(Math.random()*Math.PI,Math.random()*Math.PI,Math.random()*Math.PI);
+    rock.position.set(rx-DESERT.offX,rr*0.3,rz-DESERT.offY);
+    scene.add(rock);
+  }
+
+  // Tumbleweeds: rolling decorations that wander and spin, wrapping at the
+  // world edge like the ocean's fish.
+  function makeTumbleweed(){
+    const g=new THREE.Group();
+    const mat=new THREE.MeshStandardMaterial({color:0x8a6838,roughness:1,wireframe:true});
+    const ball=new THREE.Mesh(new THREE.IcosahedronGeometry(1,1),mat);
+    g.add(ball);
+    return g;
+  }
+  for(let i=0;i<10;i++){
+    const tw=makeTumbleweed();
+    const tx=rnd(150,WW-150), tz=rnd(150,WH-150);
+    const tr=rnd(8,14);
+    tw.scale.set(tr,tr,tr);
+    tw.position.set(tx-DESERT.offX,tr,tz-DESERT.offY);
+    tw.userData={angle:Math.random()*Math.PI*2,speed:25+Math.random()*35,turnT:Math.random()*Math.PI*2};
+    scene.add(tw);
+    DESERT.tumbleweeds.push(tw);
+  }
+
+  Object.assign(DESERT,make3DActorMeshes(THREE,scene));
 }
 
 function show3D(){
@@ -1304,6 +1579,42 @@ function render3DFrame(now,dt){
     }
   }
 
+  // Ocean-only decoration: fish drift in loose wandering paths, gently
+  // steering rather than following a fixed street.
+  if(currentBiome.id==='ocean'){
+    const half=WW/2;
+    for(const f of st.fish){
+      const d=f.userData;
+      d.turnT+=dt;
+      d.angle+=Math.sin(d.turnT*0.6)*dt*0.8;
+      f.position.x+=Math.cos(d.angle)*d.speed*dt;
+      f.position.z+=Math.sin(d.angle)*d.speed*dt;
+      f.rotation.y=Math.PI/2-d.angle;
+      if(f.position.x>half)f.position.x=-half;
+      if(f.position.x<-half)f.position.x=half;
+      if(f.position.z>half)f.position.z=-half;
+      if(f.position.z<-half)f.position.z=half;
+    }
+  }
+
+  // Desert-only decoration: tumbleweeds roll and spin as they wander.
+  if(currentBiome.id==='desert'){
+    const half=WW/2;
+    for(const tw of st.tumbleweeds){
+      const d=tw.userData;
+      d.turnT+=dt;
+      d.angle+=Math.sin(d.turnT*0.5)*dt*0.6;
+      tw.position.x+=Math.cos(d.angle)*d.speed*dt;
+      tw.position.z+=Math.sin(d.angle)*d.speed*dt;
+      tw.rotation.x+=d.speed*dt*0.05;
+      tw.rotation.z+=d.speed*dt*0.03;
+      if(tw.position.x>half)tw.position.x=-half;
+      if(tw.position.x<-half)tw.position.x=half;
+      if(tw.position.z>half)tw.position.z=-half;
+      if(tw.position.z<-half)tw.position.z=half;
+    }
+  }
+
   // Snake segments -> instanced spheres (player + AI), capping per-snake
   // count so total instances stay bounded. Render every real segment, not
   // every 2nd — consecutive real segments are at most SEG_DIST (8 world
@@ -1323,11 +1634,17 @@ function render3DFrame(now,dt){
     const step=1, cap=40;
     for(let k=0,count=0;k<n&&count<cap&&ii<420;k+=step,count++){
       const seg=s.segs[k];
-      const rad=Math.max(3,s.rad*(1-k/n*0.3));
-      m.makeScale(rad,rad,rad);
-      m.setPosition(seg.x-st.offX,rad,seg.y-st.offY);
+      // A uniform sphere chain reads as a worm. Flattening it into an oval
+      // (wider than tall, like a real snake's cross-section) and tapering
+      // harder toward the tail — plus a subtly darker band every few
+      // segments to suggest scale patterning — goes a long way toward
+      // "snake" instead of "tube of beads".
+      const rad=Math.max(2.4,s.rad*(1-k/n*0.55));
+      m.makeScale(rad*1.15,rad*0.8,rad*1.15);
+      m.setPosition(seg.x-st.offX,rad*0.8,seg.y-st.offY);
       st.segInst.setMatrixAt(ii,m);
       col.set(s.col);
+      if(k%4===0)col.offsetHSL(0,0,-0.12);
       st.segInst.setColorAt(ii,col);
       ii++;
     }
@@ -1338,17 +1655,17 @@ function render3DFrame(now,dt){
 
   let pi=0;
   for(const p of preyItems){
-    if(pi>=160)break;
-    m.makeScale(p.r,p.r,p.r);
-    m.setPosition(p.x-st.offX,p.r,p.y-st.offY);
-    st.preyInst.setMatrixAt(pi,m);
-    col.set(p.scared?'#ff8844':p.c);
-    st.preyInst.setColorAt(pi,col);
-    pi++;
+    if(pi>=st.preyPool.length)break;
+    const sprite=st.preyPool[pi++];
+    sprite.visible=true;
+    sprite.material.map=getEmojiTexture(THREE,p.e);
+    sprite.material.color.set(p.scared?0xff8844:0xffffff);
+    sprite.material.needsUpdate=true;
+    const size=p.r*2.4;
+    sprite.scale.set(size,size,1);
+    sprite.position.set(p.x-st.offX,p.r*1.3,p.y-st.offY);
   }
-  st.preyInst.count=pi;
-  st.preyInst.instanceMatrix.needsUpdate=true;
-  if(st.preyInst.instanceColor)st.preyInst.instanceColor.needsUpdate=true;
+  for(;pi<st.preyPool.length;pi++)st.preyPool[pi].visible=false;
 
   // Real head meshes on top of the instanced body, oriented to face each
   // snake's current heading.
@@ -1358,8 +1675,11 @@ function render3DFrame(now,dt){
     const hp=st.headPool[hi++];
     const rad=s.rad;
     hp.group.visible=true;
-    hp.group.position.set(s.head.x-st.offX,rad,s.head.y-st.offY);
-    hp.group.scale.set(rad,rad,rad);
+    // A real snake's head reads as distinctly wider than its neck — scale
+    // it up beyond the first body segment's radius rather than matching it.
+    const headScale=rad*1.3;
+    hp.group.position.set(s.head.x-st.offX,rad*0.8,s.head.y-st.offY);
+    hp.group.scale.set(headScale,headScale,headScale);
     hp.group.rotation.y=Math.PI/2-s.angle;
     hp.mat.color.set(s.col).offsetHSL(0,0,0.18);
   }
@@ -1375,7 +1695,7 @@ function render3DFrame(now,dt){
   if(player&&player.alive){
     const hx=player.head.x-st.offX, hz=player.head.y-st.offY;
     const ang=player.angle;
-    const dist=130+player.rad*3, height=260+player.rad*6;
+    const dist=195+player.rad*4.5, height=390+player.rad*9;
     const desiredX=hx-Math.cos(ang)*dist, desiredZ=hz-Math.sin(ang)*dist, desiredY=height;
     if(!st.camInit){
       camera.position.set(desiredX,desiredY,desiredZ);
@@ -3322,23 +3642,44 @@ function loop(ts){
   // Player input
   if(player&&player.alive){
     const dx=mX-canvas.width/2,dy=mY-canvas.height/2;
+    const in3D=THREED_BIOMES.has(currentBiome.id);
     let inputAngle=null;
     if(joystickActive)inputAngle=joystickAngle;
-    else if(Math.abs(dx)>5||Math.abs(dy)>5)inputAngle=Math.atan2(dy,dx);
-    if(inputAngle!==null){
-      if(THREED_BIOMES.has(currentBiome.id)){
-        // The 2D top-down camera never rotates, so a screen angle IS the
-        // world angle. The 3D chase camera rotates to follow the snake's
-        // own heading, so that stops being true — "push right" no longer
-        // consistently turns right on screen once the view itself is
-        // turning too, which is exactly the "joystick feels off" report.
-        // Treat the input as relative to the snake's current heading
-        // instead: stick/mouse "up" (angle -90°) continues straight
-        // ahead, deflection left/right turns relative to what's on screen.
-        player.ta=player.angle+(inputAngle+Math.PI/2);
-      }else{
-        player.ta=inputAngle;
+    // The mouse/stale-touch fallback below only self-corrects to a fixed
+    // absolute heading in the (non-rotating) 2D camera. In 3D it feeds a
+    // *relative* turn that's applied every single frame — and mX/mY freeze
+    // wherever a finger last touched the screen (touchmove stops firing once
+    // it lifts), so once you release the joystick this fallback can lock
+    // onto a stale, off-center point and spin the snake continuously with
+    // nobody touching anything. Only the actively-held joystick should steer
+    // in 3D; falling back to "no new input" (keep the current heading) is
+    // correct there, not stale-mouse steering.
+    else if(!in3D&&(Math.abs(dx)>5||Math.abs(dy)>5))inputAngle=Math.atan2(dy,dx);
+    if(in3D){
+      // The 2D top-down camera never rotates, so a screen angle IS the
+      // world angle. The 3D chase camera rotates to follow the snake's own
+      // heading, so that stops being true — "push right" no longer
+      // consistently turns right on screen once the view itself is turning
+      // too. Recomputing player.ta as player.angle+offset every frame (the
+      // old approach) is a runaway integrator: da=ta-angle always equals
+      // that fixed offset no matter how far the snake has already turned,
+      // so this.angle+=da*0.22 adds the SAME increment every single frame
+      // forever — a constant-rate spin for as long as any offset is held,
+      // which for a thumb on a stick is basically always (hence "spins the
+      // instant I touch it"). Instead treat the sideways deflection as a
+      // turn RATE and integrate it into the heading directly, scaled by
+      // real elapsed time and how far the stick is actually pushed, so a
+      // light nudge barely turns and centering the stick stops turning.
+      if(joystickActive&&joystickMag>0.05){
+        let rel=joystickAngle+Math.PI/2;
+        rel=Math.atan2(Math.sin(rel),Math.cos(rel));
+        const norm=Math.max(-1,Math.min(1,rel/(Math.PI*0.75)));
+        const maxTurnRate=3.4;
+        player.angle+=norm*maxTurnRate*joystickMag*(dt/1000);
       }
+      player.ta=player.angle;
+    }else if(inputAngle!==null){
+      player.ta=inputAngle;
     }
     if(keys['ArrowRight'])player.ta=0;if(keys['ArrowDown'])player.ta=Math.PI/2;
     if(keys['ArrowLeft'])player.ta=Math.PI;if(keys['ArrowUp'])player.ta=-Math.PI/2;
@@ -3398,7 +3739,7 @@ function loop(ts){
 // ═══════════════════════════════════════════
 // INPUT
 // ═══════════════════════════════════════════
-let joystickActive=false,joystickAngle=0;
+let joystickActive=false,joystickAngle=-Math.PI/2,joystickMag=0;
 window.addEventListener('mousemove',e=>{mX=e.clientX;mY=e.clientY;});
 window.addEventListener('touchmove',e=>{e.preventDefault();if(!joystickActive){mX=e.touches[0].clientX;mY=e.touches[0].clientY;}},{passive:false});
 // Right side tap = move direction (no joystick needed)
@@ -3422,9 +3763,9 @@ const joyOuter=document.getElementById('joyOuter');
 const joyInner=document.getElementById('joyInner');
 if(joyOuter){
   let joyStart={x:0,y:0};
-  joyOuter.addEventListener('touchstart',e=>{e.preventDefault();joystickActive=true;const r=joyOuter.getBoundingClientRect();joyStart={x:r.left+r.width/2,y:r.top+r.height/2};},{passive:false});
-  joyOuter.addEventListener('touchmove',e=>{e.preventDefault();const t=e.touches[0];const dx=t.clientX-joyStart.x,dy=t.clientY-joyStart.y;const dist=Math.hypot(dx,dy);const maxD=38;const cx2=Math.cos(Math.atan2(dy,dx))*Math.min(dist,maxD);const cy2=Math.sin(Math.atan2(dy,dx))*Math.min(dist,maxD);joyInner.style.left=(50+cx2/maxD*38)+'%';joyInner.style.top=(50+cy2/maxD*38)+'%';joystickAngle=Math.atan2(dy,dx);},{passive:false});
-  joyOuter.addEventListener('touchend',()=>{joystickActive=false;joyInner.style.left='50%';joyInner.style.top='50%';});
+  joyOuter.addEventListener('touchstart',e=>{e.preventDefault();joystickActive=true;joystickMag=0;joystickAngle=-Math.PI/2;const r=joyOuter.getBoundingClientRect();joyStart={x:r.left+r.width/2,y:r.top+r.height/2};},{passive:false});
+  joyOuter.addEventListener('touchmove',e=>{e.preventDefault();const t=e.touches[0];const dx=t.clientX-joyStart.x,dy=t.clientY-joyStart.y;const dist=Math.hypot(dx,dy);const maxD=38;const cx2=Math.cos(Math.atan2(dy,dx))*Math.min(dist,maxD);const cy2=Math.sin(Math.atan2(dy,dx))*Math.min(dist,maxD);joyInner.style.left=(50+cx2/maxD*38)+'%';joyInner.style.top=(50+cy2/maxD*38)+'%';joystickAngle=Math.atan2(dy,dx);joystickMag=Math.min(dist,maxD)/maxD;},{passive:false});
+  joyOuter.addEventListener('touchend',()=>{joystickActive=false;joystickMag=0;joyInner.style.left='50%';joyInner.style.top='50%';});
 }
 
 // Ability taps (mobile)
