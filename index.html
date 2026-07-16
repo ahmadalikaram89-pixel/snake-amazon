@@ -1356,15 +1356,17 @@ function render3DFrame(now,dt){
   }
   for(;hi<st.headPool.length;hi++)st.headPool[hi].group.visible=false;
 
-  // Chase camera: behind and above the player, looking slightly ahead of the
-  // head along its current heading. Shared by every 3D biome.
+  // Chase camera: behind and well above the player. A shallow angle looks
+  // straight down the snake's own body axis when it's moving in a straight
+  // line — the whole body foreshortens into a single blob behind the head
+  // (exactly the "doesn't look like a snake" bug reported from a real
+  // device). A steep, more top-down-ish angle instead looks *down onto* the
+  // winding body, and as a side benefit sits well clear of nearby
+  // trees/buildings instead of grazing them.
   if(player&&player.alive){
     const hx=player.head.x-st.offX, hz=player.head.y-st.offY;
     const ang=player.angle;
-    // Pull back (and up) further as the snake grows, same idea as the 2D
-    // camera's zoom-out-with-length — a fixed distance felt cramped once
-    // buildings/trees were close by and the player had grown a bit.
-    const dist=170+player.rad*5, height=160+player.rad*4;
+    const dist=130+player.rad*3, height=260+player.rad*6;
     const desiredX=hx-Math.cos(ang)*dist, desiredZ=hz-Math.sin(ang)*dist, desiredY=height;
     if(!st.camInit){
       camera.position.set(desiredX,desiredY,desiredZ);
@@ -1374,7 +1376,7 @@ function render3DFrame(now,dt){
       camera.position.y=lp(camera.position.y,desiredY,.08);
       camera.position.z=lp(camera.position.z,desiredZ,.08);
     }
-    const lookX=hx+Math.cos(ang)*55, lookZ=hz+Math.sin(ang)*55;
+    const lookX=hx+Math.cos(ang)*20, lookZ=hz+Math.sin(ang)*20;
     camera.lookAt(lookX,8,lookZ);
   }
 
