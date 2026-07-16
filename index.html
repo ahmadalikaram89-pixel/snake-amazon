@@ -946,14 +946,15 @@ function shuffleBiomeOrder(){
 // first time a match enters it. Biomes not in THREED_BIOMES keep using the
 // original 2D canvas path untouched.
 // ═══════════════════════════════════════════
-const THREED_BIOMES=new Set(['nyc','jungle','ocean','desert','space']);
+const THREED_BIOMES=new Set(['nyc','jungle','ocean','desert','space','snow']);
 let TD=null;            // shared: {THREE,BufferGeometryUtils,renderer,camera,lastW,lastH}
 let tdLoadPromise=null;
-let NYC=null;            // {scene,offX,offY,obstacles,segInst,preyPool,taxis,camInit}
-let JUNGLE=null;         // {scene,offX,offY,obstacles,segInst,preyPool,camInit}
-let OCEAN=null;          // {scene,offX,offY,obstacles,segInst,preyPool,fish,camInit}
-let DESERT=null;         // {scene,offX,offY,obstacles,segInst,preyPool,tumbleweeds,camInit}
-let SPACE=null;          // {scene,offX,offY,obstacles,segInst,preyPool,debris,camInit}
+let NYC=null;            // {scene,offX,offY,obstacles,bodyPool,preyPool,taxis,camInit}
+let JUNGLE=null;         // {scene,offX,offY,obstacles,bodyPool,preyPool,camInit}
+let OCEAN=null;          // {scene,offX,offY,obstacles,bodyPool,preyPool,fish,camInit}
+let DESERT=null;         // {scene,offX,offY,obstacles,bodyPool,preyPool,tumbleweeds,camInit}
+let SPACE=null;          // {scene,offX,offY,obstacles,bodyPool,preyPool,debris,camInit}
+let SNOW=null;           // {scene,offX,offY,obstacles,bodyPool,preyPool,snowballs,camInit}
 
 function ensure3D(){
   if(TD)return Promise.resolve(TD);
@@ -989,11 +990,55 @@ function getEmojiTexture(THREE,emoji){
   return tex;
 }
 
+// A repeating scale/ring pattern tiled along the body ribbon's length — a
+// white base (so material.color tints it per-snake) with a darker band, so
+// it reads as the classic snake's ringed scale pattern instead of a flat
+// solid strip.
+let _bodyRingTex=null;
+function getBodyRingTexture(THREE){
+  if(_bodyRingTex)return _bodyRingTex;
+  const c=document.createElement('canvas');c.width=32;c.height=64;
+  const g=c.getContext('2d');
+  g.fillStyle='#ffffff';g.fillRect(0,0,32,64);
+  g.fillStyle='rgba(0,0,0,0.32)';
+  g.beginPath();g.ellipse(16,58,15,8,0,0,Math.PI*2);g.fill();
+  const tex=new THREE.CanvasTexture(c);
+  tex.wrapS=THREE.ClampToEdgeWrapping;
+  tex.wrapT=THREE.RepeatWrapping;
+  return _bodyRingTex=tex;
+}
+
 function make3DActorMeshes(THREE,scene){
-  const MAX_SEGS=420;
-  const segInst=new THREE.InstancedMesh(new THREE.SphereGeometry(1,10,10),new THREE.MeshStandardMaterial({roughness:0.5}),MAX_SEGS);
-  segInst.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  scene.add(segInst);
+  // Snake bodies render as one continuous flat ribbon mesh per snake — a
+  // real triangle strip following the live segment positions, lying flat on
+  // the ground — instead of a chain of separate beads/dots. This recreates
+  // the classic top-down 2D snake's smooth curved silhouette. It's also a
+  // plain (non-instanced) Mesh per snake, same proven-reliable rendering
+  // path as the head below; an InstancedMesh body used earlier silently
+  // failed to render on some real mobile GPUs/WebGL drivers even though the
+  // environment and head drew fine ("the snake's body disappears").
+  const BODY_POOL=16, MAX_PTS=40, bodyPool=[];
+  const bodyIndices=[];
+  for(let p=0;p<MAX_PTS-1;p++){
+    const a=p*2,b=p*2+1,c=p*2+2,d=p*2+3;
+    bodyIndices.push(a,b,c, b,d,c);
+  }
+  const bodyRingTex=getBodyRingTexture(THREE);
+  for(let i=0;i<BODY_POOL;i++){
+    const geo=new THREE.BufferGeometry();
+    const positions=new Float32Array(MAX_PTS*2*3);
+    geo.setAttribute('position',new THREE.BufferAttribute(positions,3).setUsage(THREE.DynamicDrawUsage));
+    const uvs=new Float32Array(MAX_PTS*2*2);
+    geo.setAttribute('uv',new THREE.BufferAttribute(uvs,2).setUsage(THREE.DynamicDrawUsage));
+    geo.setIndex(bodyIndices);
+    geo.setDrawRange(0,0);
+    const mat=new THREE.MeshStandardMaterial({roughness:0.6,side:THREE.DoubleSide,map:bodyRingTex});
+    const mesh=new THREE.Mesh(geo,mat);
+    mesh.visible=false;
+    mesh.frustumCulled=false;
+    scene.add(mesh);
+    bodyPool.push(mesh);
+  }
 
   // Prey render as billboarded emoji sprites (always face the camera) instead
   // of plain colored balls — the actual rabbit/fish/taxi/etc. icon shows up
@@ -1028,7 +1073,7 @@ function make3DActorMeshes(THREE,scene){
     scene.add(g);
     headPool.push({group:g,mat:headMat});
   }
-  return {segInst,preyPool,headPool};
+  return {bodyPool,preyPool,headPool};
 }
 
 function build3DBiome(biomeId){
@@ -1037,6 +1082,7 @@ function build3DBiome(biomeId){
   else if(biomeId==='ocean')buildOceanWorldOnce();
   else if(biomeId==='desert')buildDesertWorldOnce();
   else if(biomeId==='space')buildSpaceWorldOnce();
+  else if(biomeId==='snow')buildSnowWorldOnce();
 }
 function get3D(biomeId){
   if(biomeId==='nyc')return NYC;
@@ -1044,6 +1090,7 @@ function get3D(biomeId){
   if(biomeId==='ocean')return OCEAN;
   if(biomeId==='desert')return DESERT;
   if(biomeId==='space')return SPACE;
+  if(biomeId==='snow')return SNOW;
   return null;
 }
 
@@ -1220,9 +1267,9 @@ function buildJungleWorldOnce(){
   const scene=new THREE.Scene();
   scene.background=new THREE.Color(0x0a1408);
   scene.fog=new THREE.FogExp2(0x0a1408,0.0028);
-  scene.add(new THREE.HemisphereLight(0x7ab058,0x2a3810,2.6));
-  scene.add(new THREE.AmbientLight(0x3a5a28,2.0));
-  const sun=new THREE.DirectionalLight(0xd8ffc0,1.7);
+  scene.add(new THREE.HemisphereLight(0x7ab058,0x2a3810,3.2));
+  scene.add(new THREE.AmbientLight(0x3a5a28,2.6));
+  const sun=new THREE.DirectionalLight(0xd8ffc0,2.1);
   sun.position.set(350,600,200);
   scene.add(sun);
 
@@ -1653,6 +1700,119 @@ function buildSpaceWorldOnce(){
   Object.assign(SPACE,make3DActorMeshes(THREE,scene));
 }
 
+function buildSnowWorldOnce(){
+  if(SNOW)return;
+  const {THREE}=TD;
+  const scene=new THREE.Scene();
+  scene.background=new THREE.Color(0xc8dce8);
+  scene.fog=new THREE.FogExp2(0xd0e4f0,0.0015);
+  scene.add(new THREE.HemisphereLight(0xe8f4ff,0xb8c8d8,2.2));
+  scene.add(new THREE.AmbientLight(0xa8c0d8,1.3));
+  const sun=new THREE.DirectionalLight(0xffffff,1.7);
+  sun.position.set(-250,700,300);
+  scene.add(sun);
+
+  SNOW={scene,offX:WW/2,offY:WH/2,obstacles:[],snowballs:[],camInit:false};
+
+  function snowTexture(){
+    const c=document.createElement('canvas');c.width=128;c.height=128;
+    const g=c.getContext('2d');
+    g.fillStyle='#e8f2fa';g.fillRect(0,0,128,128);
+    const patches=['#d0e0ec','#c0d4e4','#e4eef6','#b8ccdc'];
+    for(let i=0;i<160;i++){
+      const x=Math.random()*128,y=Math.random()*128,r=2+Math.random()*14;
+      g.fillStyle=patches[i%patches.length];g.globalAlpha=0.25+Math.random()*0.3;
+      g.beginPath();g.arc(x,y,r,0,Math.PI*2);g.fill();
+    }
+    g.globalAlpha=1;
+    const tex=new THREE.CanvasTexture(c);
+    tex.wrapS=tex.wrapT=THREE.RepeatWrapping;tex.repeat.set(WW/128,WH/128);
+    return tex;
+  }
+  const ground=new THREE.Mesh(new THREE.PlaneGeometry(WW,WH),new THREE.MeshStandardMaterial({map:snowTexture(),roughness:0.85}));
+  ground.rotation.x=-Math.PI/2;
+  scene.add(ground);
+
+  // Low snow drifts — decorative only, a gentle rolling horizon like the
+  // desert's dunes.
+  const driftGeo=new THREE.SphereGeometry(1,10,6);
+  for(let i=0;i<40;i++){
+    const dx=rnd(100,WW-100), dz=rnd(100,WH-100);
+    const dr=rnd(35,80);
+    const drift=new THREE.Mesh(driftGeo,new THREE.MeshStandardMaterial({color:0xe8f2fa,roughness:0.9}));
+    drift.scale.set(dr,dr*0.2,dr);
+    drift.position.set(dx-SNOW.offX,-dr*0.12,dz-SNOW.offY);
+    scene.add(drift);
+  }
+
+  // Frost-covered pine trees: solid circular obstacles — a tapered trunk
+  // with three stacked snow-capped conical tiers.
+  const trunkGeo=new THREE.CylinderGeometry(1.2,1.6,1,8);
+  const tierGeo=new THREE.ConeGeometry(1,1,9);
+  const capGeo=new THREE.ConeGeometry(1,1,9);
+  const pineRoot=new THREE.Group();
+  scene.add(pineRoot);
+  const NUM_PINES=110;
+  for(let i=0;i<NUM_PINES;i++){
+    const tx=rnd(120,WW-120), tz=rnd(120,WH-120);
+    const trunkH=rnd(14,22), trunkR=rnd(3,4.5);
+    const treeH=rnd(50,80);
+    const tree=new THREE.Group();
+    tree.position.set(tx-SNOW.offX,0,tz-SNOW.offY);
+    const trunkMat=new THREE.MeshStandardMaterial({color:0x3a2a1a,roughness:0.9});
+    const trunk=new THREE.Mesh(trunkGeo,trunkMat);
+    trunk.scale.set(trunkR,trunkH,trunkR);
+    trunk.position.y=trunkH/2;
+    tree.add(trunk);
+    const foliageMat=new THREE.MeshStandardMaterial({color:0x1a4a3a,roughness:0.8});
+    const snowMat=new THREE.MeshStandardMaterial({color:0xf0f8ff,roughness:0.7});
+    const tiers=3;
+    for(let t=0;t<tiers;t++){
+      const tierR=(trunkR*3.2)*(1-t*0.24), tierH=treeH*0.42;
+      const tierY=trunkH+t*(treeH*0.3);
+      const tier=new THREE.Mesh(tierGeo,foliageMat);
+      tier.scale.set(tierR,tierH,tierR);
+      tier.position.y=tierY+tierH/2;
+      tree.add(tier);
+      const cap=new THREE.Mesh(capGeo,snowMat);
+      cap.scale.set(tierR*0.75,tierH*0.32,tierR*0.75);
+      cap.position.y=tierY+tierH*0.86;
+      tree.add(cap);
+    }
+    pineRoot.add(tree);
+    SNOW.obstacles.push({shape:'circle',x:tx,y:tz,radius:trunkR*3.2+8});
+  }
+
+  // Ice boulders — decorative only, pale blue-white with a faint glassy
+  // glow so they read against the snow instead of vanishing into it.
+  const iceGeo=new THREE.IcosahedronGeometry(1,0);
+  for(let i=0;i<50;i++){
+    const ix=rnd(100,WW-100), iz=rnd(100,WH-100);
+    const ir=rnd(8,20);
+    const ice=new THREE.Mesh(iceGeo,new THREE.MeshStandardMaterial({color:0xbde0f0,roughness:0.3,emissive:0x6ab0d8,emissiveIntensity:0.15}));
+    ice.scale.set(ir,ir*rnd(0.7,1.1),ir);
+    ice.rotation.set(Math.random()*Math.PI,Math.random()*Math.PI,Math.random()*Math.PI);
+    ice.position.set(ix-SNOW.offX,ir*0.3,iz-SNOW.offY);
+    scene.add(ice);
+  }
+
+  // Rolling snowballs: decorative wanderers that drift and spin, wrapping at
+  // the world edge like the desert's tumbleweeds / space's debris.
+  const ballGeo=new THREE.IcosahedronGeometry(1,1);
+  for(let i=0;i<10;i++){
+    const ball=new THREE.Mesh(ballGeo,new THREE.MeshStandardMaterial({color:0xf4faff,roughness:0.6}));
+    const bx=rnd(150,WW-150), bz=rnd(150,WH-150);
+    const br=rnd(7,13);
+    ball.scale.set(br,br,br);
+    ball.position.set(bx-SNOW.offX,br,bz-SNOW.offY);
+    ball.userData={angle:Math.random()*Math.PI*2,speed:20+Math.random()*28,turnT:Math.random()*Math.PI*2};
+    scene.add(ball);
+    SNOW.snowballs.push(ball);
+  }
+
+  Object.assign(SNOW,make3DActorMeshes(THREE,scene));
+}
+
 function show3D(){
   document.getElementById('gc').style.display='none';
   document.getElementById('gc3d').style.display='block';
@@ -1744,48 +1904,81 @@ function render3DFrame(now,dt){
     }
   }
 
-  // Snake segments -> instanced spheres (player + AI), capping per-snake
-  // count so total instances stay bounded. Render every real segment, not
-  // every 2nd — consecutive real segments are at most SEG_DIST (8 world
-  // units) apart (that's the chain-follow clamp), which every sphere's
-  // diameter comfortably covers, so they visually overlap into one
-  // continuous body. Skipping every other one relied on segments normally
-  // sitting *closer* than that (they do at base speed), so it broke exactly
-  // when something moved faster than usual — boost doubles speed, which
-  // widens real segment spacing enough that the *sampled* (every-2nd) gap
-  // exceeded the sphere size and the body visibly fell apart into beads,
-  // worst on a short/thin fresh-spawn snake.
-  const m=new THREE.Matrix4(),col=new THREE.Color();
-  let ii=0;
-  const allSnakes=[player,...aiSnakes].filter(s=>s&&s.alive);
-  for(const s of allSnakes){
-    const n=s.segs.length;
-    const step=1, cap=40;
-    for(let k=0,count=0;k<n&&count<cap&&ii<420;k+=step,count++){
-      const seg=s.segs[k];
-      // A uniform sphere chain reads as a worm. Flattening it into an oval
-      // (wider than tall, like a real snake's cross-section) and tapering
-      // harder toward the tail — plus a subtly darker band every few
-      // segments to suggest scale patterning — goes a long way toward
-      // "snake" instead of "tube of beads".
-      const rad=Math.max(2.4,s.rad*(1-k/n*0.55));
-      m.makeScale(rad*1.15,rad*0.8,rad*1.15);
-      m.setPosition(seg.x-st.offX,rad*0.8,seg.y-st.offY);
-      st.segInst.setMatrixAt(ii,m);
-      col.set(s.col);
-      if(k%4===0)col.offsetHSL(0,0,-0.12);
-      // Camouflage used to be a ctx.globalAlpha fade drawn on the 2D canvas
-      // only — invisible in 3D, so the ability looked completely dead here.
-      // Dim the body toward black instead, since instanced meshes share one
-      // material and can't vary opacity per-instance.
-      if(s.hideOn)col.multiplyScalar(0.32);
-      st.segInst.setColorAt(ii,col);
-      ii++;
+  // Snow-only decoration: snowballs roll and spin as they wander.
+  if(currentBiome.id==='snow'){
+    const half=WW/2;
+    for(const b of st.snowballs){
+      const u=b.userData;
+      u.turnT+=dt;
+      u.angle+=Math.sin(u.turnT*0.5)*dt*0.6;
+      b.position.x+=Math.cos(u.angle)*u.speed*dt;
+      b.position.z+=Math.sin(u.angle)*u.speed*dt;
+      b.rotation.x+=u.speed*dt*0.05;
+      b.rotation.z+=u.speed*dt*0.03;
+      if(b.position.x>half)b.position.x=-half;
+      if(b.position.x<-half)b.position.x=half;
+      if(b.position.z>half)b.position.z=-half;
+      if(b.position.z<-half)b.position.z=half;
     }
   }
-  st.segInst.count=ii;
-  st.segInst.instanceMatrix.needsUpdate=true;
-  if(st.segInst.instanceColor)st.segInst.instanceColor.needsUpdate=true;
+
+  // Snake bodies -> one continuous flat ribbon mesh per snake (player + AI),
+  // a real triangle strip through the live segment positions instead of a
+  // chain of separate beads — the classic top-down 2D snake silhouette.
+  // Capped at MAX_PTS/BODY_POOL per pool sizing so both stay bounded.
+  const col=new THREE.Color();
+  let bi=0;
+  const allSnakes=[player,...aiSnakes].filter(s=>s&&s.alive);
+  for(const s of allSnakes){
+    if(bi>=st.bodyPool.length)break;
+    const mesh=st.bodyPool[bi++];
+    const n=Math.min(s.segs.length,40);
+    if(n<2){mesh.visible=false;continue;}
+    const rad=s.rad;
+    const posAttr=mesh.geometry.attributes.position;
+    const arr=posAttr.array;
+    const uvAttr=mesh.geometry.attributes.uv;
+    const uvArr=uvAttr.array;
+    const RING_SPACING=rad*3.2;
+    let cum=0;
+    for(let k=0;k<n;k++){
+      const seg=s.segs[k];
+      const px=seg.x-st.offX, pz=seg.y-st.offY;
+      // Perpendicular (right) direction at this point, from the direction
+      // of travel to the next point (or from the previous point, at the
+      // tail) — offsetting left/right by that gives the ribbon's two edges.
+      let dx,dz;
+      if(k<n-1){dx=s.segs[k+1].x-seg.x;dz=s.segs[k+1].y-seg.y;}
+      else{dx=seg.x-s.segs[k-1].x;dz=seg.y-s.segs[k-1].y;}
+      const dl=Math.hypot(dx,dz)||1;
+      const rx=-dz/dl, rz=dx/dl;
+      const y=rad*0.8;
+      arr[k*6+0]=px+rx*rad; arr[k*6+1]=y; arr[k*6+2]=pz+rz*rad;
+      arr[k*6+3]=px-rx*rad; arr[k*6+4]=y; arr[k*6+5]=pz-rz*rad;
+      // Arc-length-based V coordinate (not just k/n) so the ring/scale
+      // pattern's real-world spacing stays constant regardless of how long
+      // the snake is, instead of stretching or compressing to fit.
+      if(k>0){
+        const prev=s.segs[k-1];
+        cum+=Math.hypot(seg.x-prev.x,seg.y-prev.y);
+      }
+      const v=cum/RING_SPACING;
+      uvArr[k*4+0]=0; uvArr[k*4+1]=v;
+      uvArr[k*4+2]=1; uvArr[k*4+3]=v;
+    }
+    posAttr.needsUpdate=true;
+    uvAttr.needsUpdate=true;
+    mesh.geometry.setDrawRange(0,(n-1)*6);
+    mesh.geometry.computeBoundingSphere();
+    mesh.visible=true;
+    col.set(s.col);
+    // Camouflage used to be a ctx.globalAlpha fade drawn on the 2D canvas
+    // only — invisible in 3D, so the ability looked completely dead here.
+    // Dim the body toward black instead to mirror that fade.
+    if(s.hideOn)col.multiplyScalar(0.32);
+    mesh.material.color.copy(col);
+  }
+  for(;bi<st.bodyPool.length;bi++)st.bodyPool[bi].visible=false;
 
   let pi=0;
   for(const p of preyItems){
@@ -1897,12 +2090,15 @@ function resolve3DCollision(snake,nh,now){
 // ═══════════════════════════════════════════
 // SNAKE FORMS (evolve with level)
 // ═══════════════════════════════════════════
+// Each evolution tier also carries a distinct snake body color — starting
+// from the classic mint-green look, then progressing through metal/gem
+// tiers (silver, bronze, gold, diamond) as the player levels up in-match.
 const SNAKE_FORMS=[
-  {minLv:1,  name:'Anaconda',    headScale:1.45, eyeStyle:'normal',  twoHeads:false, colMult:1.0,  glowCol:'#00ffaa'},
-  {minLv:3,  name:'Giant Boa',   headScale:1.55, eyeStyle:'normal',  twoHeads:false, colMult:1.1,  glowCol:'#44ff44'},
-  {minLv:5,  name:'Cobra',       headScale:1.55, eyeStyle:'cobra',   twoHeads:false, colMult:1.2,  glowCol:'#ffcc00'},
-  {minLv:7,  name:'King Cobra',  headScale:1.65, eyeStyle:'cobra',   twoHeads:false, colMult:1.3,  glowCol:'#ff8800'},
-  {minLv:9,  name:'Twin Cobra',  headScale:1.75, eyeStyle:'cobra',   twoHeads:true,  colMult:1.4,  glowCol:'#ff2200'},
+  {minLv:1,  name:'Anaconda',    headScale:1.45, eyeStyle:'normal',  twoHeads:false, colMult:1.0,  glowCol:'#00ffaa', col:'#00ffaa', darkCol:'#003322'},
+  {minLv:3,  name:'Giant Boa',   headScale:1.55, eyeStyle:'normal',  twoHeads:false, colMult:1.1,  glowCol:'#44ff44', col:'#d0d4dc', darkCol:'#2a2c30'},
+  {minLv:5,  name:'Cobra',       headScale:1.55, eyeStyle:'cobra',   twoHeads:false, colMult:1.2,  glowCol:'#ffcc00', col:'#cd7f32', darkCol:'#291a0a'},
+  {minLv:7,  name:'King Cobra',  headScale:1.65, eyeStyle:'cobra',   twoHeads:false, colMult:1.3,  glowCol:'#ff8800', col:'#ffd700', darkCol:'#332b00'},
+  {minLv:9,  name:'Twin Cobra',  headScale:1.75, eyeStyle:'cobra',   twoHeads:true,  colMult:1.4,  glowCol:'#ff2200', col:'#b9f2ff', darkCol:'#253033'},
 ];
 
 function getSnakeForm(lv){
@@ -3461,6 +3657,12 @@ function checkInGameLevel(){
     applyLevelReward(inGameLevel);
     showLevelUp(inGameLevel);
     snd('kill'); // fanfare
+    // Snake body color follows the new evolution tier (mint -> silver ->
+    // bronze -> gold -> diamond) so leveling up is visibly rewarding.
+    if(player){
+      const form=getSnakeForm(inGameLevel);
+      player.col=form.col;player.darkCol=form.darkCol;
+    }
   }
 }
 
@@ -3659,9 +3861,14 @@ function initGame(){
 
   buildWorld();
 
-  // Player — snake color reflects the account's current rank tier
+  // Player — snake color reflects the current evolution tier (form), not
+  // the account rank; it starts at the base mint-green look and changes
+  // through silver/bronze/gold/diamond as the player levels up in-match
+  // (see checkInGameLevel). The account rank tier still picks the AI color
+  // pool below and the menu avatar border, just not the player's own color.
   const rankTier=getRankTier(stats.level||1);
-  player=new Snake(WW/2,WH/2,SNAKE_COLORS[rankTier.colorIdx],true,'YOU',selectedAbility);
+  const startForm=getSnakeForm(1);
+  player=new Snake(WW/2,WH/2,{h:startForm.col,d:startForm.darkCol},true,'YOU',selectedAbility);
   // Update ability icon
   const ab=ABILITIES[selectedAbility];
   document.getElementById('ab-special-icon').textContent=ab.icon;
