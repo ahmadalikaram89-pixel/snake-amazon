@@ -990,6 +990,24 @@ function getEmojiTexture(THREE,emoji){
   return tex;
 }
 
+// A repeating scale/ring pattern tiled along the body ribbon's length — a
+// white base (so material.color tints it per-snake) with a darker band, so
+// it reads as the classic snake's ringed scale pattern instead of a flat
+// solid strip.
+let _bodyRingTex=null;
+function getBodyRingTexture(THREE){
+  if(_bodyRingTex)return _bodyRingTex;
+  const c=document.createElement('canvas');c.width=32;c.height=64;
+  const g=c.getContext('2d');
+  g.fillStyle='#ffffff';g.fillRect(0,0,32,64);
+  g.fillStyle='rgba(0,0,0,0.32)';
+  g.beginPath();g.ellipse(16,58,15,8,0,0,Math.PI*2);g.fill();
+  const tex=new THREE.CanvasTexture(c);
+  tex.wrapS=THREE.ClampToEdgeWrapping;
+  tex.wrapT=THREE.RepeatWrapping;
+  return _bodyRingTex=tex;
+}
+
 function make3DActorMeshes(THREE,scene){
   // Snake bodies render as one continuous flat ribbon mesh per snake — a
   // real triangle strip following the live segment positions, lying flat on
@@ -1005,13 +1023,16 @@ function make3DActorMeshes(THREE,scene){
     const a=p*2,b=p*2+1,c=p*2+2,d=p*2+3;
     bodyIndices.push(a,b,c, b,d,c);
   }
+  const bodyRingTex=getBodyRingTexture(THREE);
   for(let i=0;i<BODY_POOL;i++){
     const geo=new THREE.BufferGeometry();
     const positions=new Float32Array(MAX_PTS*2*3);
     geo.setAttribute('position',new THREE.BufferAttribute(positions,3).setUsage(THREE.DynamicDrawUsage));
+    const uvs=new Float32Array(MAX_PTS*2*2);
+    geo.setAttribute('uv',new THREE.BufferAttribute(uvs,2).setUsage(THREE.DynamicDrawUsage));
     geo.setIndex(bodyIndices);
     geo.setDrawRange(0,0);
-    const mat=new THREE.MeshStandardMaterial({roughness:0.6,side:THREE.DoubleSide});
+    const mat=new THREE.MeshStandardMaterial({roughness:0.6,side:THREE.DoubleSide,map:bodyRingTex});
     const mesh=new THREE.Mesh(geo,mat);
     mesh.visible=false;
     mesh.frustumCulled=false;
@@ -1916,6 +1937,10 @@ function render3DFrame(now,dt){
     const rad=s.rad;
     const posAttr=mesh.geometry.attributes.position;
     const arr=posAttr.array;
+    const uvAttr=mesh.geometry.attributes.uv;
+    const uvArr=uvAttr.array;
+    const RING_SPACING=rad*3.2;
+    let cum=0;
     for(let k=0;k<n;k++){
       const seg=s.segs[k];
       const px=seg.x-st.offX, pz=seg.y-st.offY;
@@ -1930,8 +1955,19 @@ function render3DFrame(now,dt){
       const y=rad*0.8;
       arr[k*6+0]=px+rx*rad; arr[k*6+1]=y; arr[k*6+2]=pz+rz*rad;
       arr[k*6+3]=px-rx*rad; arr[k*6+4]=y; arr[k*6+5]=pz-rz*rad;
+      // Arc-length-based V coordinate (not just k/n) so the ring/scale
+      // pattern's real-world spacing stays constant regardless of how long
+      // the snake is, instead of stretching or compressing to fit.
+      if(k>0){
+        const prev=s.segs[k-1];
+        cum+=Math.hypot(seg.x-prev.x,seg.y-prev.y);
+      }
+      const v=cum/RING_SPACING;
+      uvArr[k*4+0]=0; uvArr[k*4+1]=v;
+      uvArr[k*4+2]=1; uvArr[k*4+3]=v;
     }
     posAttr.needsUpdate=true;
+    uvAttr.needsUpdate=true;
     mesh.geometry.setDrawRange(0,(n-1)*6);
     mesh.geometry.computeBoundingSphere();
     mesh.visible=true;
