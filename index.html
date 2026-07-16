@@ -949,12 +949,12 @@ function shuffleBiomeOrder(){
 const THREED_BIOMES=new Set(['nyc','jungle','ocean','desert','space','snow']);
 let TD=null;            // shared: {THREE,BufferGeometryUtils,renderer,camera,lastW,lastH}
 let tdLoadPromise=null;
-let NYC=null;            // {scene,offX,offY,obstacles,segInst,preyPool,taxis,camInit}
-let JUNGLE=null;         // {scene,offX,offY,obstacles,segInst,preyPool,camInit}
-let OCEAN=null;          // {scene,offX,offY,obstacles,segInst,preyPool,fish,camInit}
-let DESERT=null;         // {scene,offX,offY,obstacles,segInst,preyPool,tumbleweeds,camInit}
-let SPACE=null;          // {scene,offX,offY,obstacles,segInst,preyPool,debris,camInit}
-let SNOW=null;           // {scene,offX,offY,obstacles,segInst,preyPool,snowballs,camInit}
+let NYC=null;            // {scene,offX,offY,obstacles,segSprites,preyPool,taxis,camInit}
+let JUNGLE=null;         // {scene,offX,offY,obstacles,segSprites,preyPool,camInit}
+let OCEAN=null;          // {scene,offX,offY,obstacles,segSprites,preyPool,fish,camInit}
+let DESERT=null;         // {scene,offX,offY,obstacles,segSprites,preyPool,tumbleweeds,camInit}
+let SPACE=null;          // {scene,offX,offY,obstacles,segSprites,preyPool,debris,camInit}
+let SNOW=null;           // {scene,offX,offY,obstacles,segSprites,preyPool,snowballs,camInit}
 
 function ensure3D(){
   if(TD)return Promise.resolve(TD);
@@ -990,11 +990,39 @@ function getEmojiTexture(THREE,emoji){
   return tex;
 }
 
+// A soft round sprite texture shared by every snake body segment — plain
+// white so a Sprite's material.color tints it to any snake's own color.
+let _segCircleTex=null;
+function getSegCircleTexture(THREE){
+  if(_segCircleTex)return _segCircleTex;
+  const c=document.createElement('canvas');c.width=64;c.height=64;
+  const g=c.getContext('2d');
+  const grad=g.createRadialGradient(32,32,0,32,32,30);
+  grad.addColorStop(0,'rgba(255,255,255,1)');
+  grad.addColorStop(0.82,'rgba(255,255,255,1)');
+  grad.addColorStop(1,'rgba(255,255,255,0)');
+  g.fillStyle=grad;g.beginPath();g.arc(32,32,30,0,Math.PI*2);g.fill();
+  _segCircleTex=new THREE.CanvasTexture(c);
+  return _segCircleTex;
+}
+
 function make3DActorMeshes(THREE,scene){
-  const MAX_SEGS=420;
-  const segInst=new THREE.InstancedMesh(new THREE.SphereGeometry(1,10,10),new THREE.MeshStandardMaterial({roughness:0.5}),MAX_SEGS);
-  segInst.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  scene.add(segInst);
+  // Snake body segments render as billboarded (always-camera-facing) round
+  // sprites rather than an InstancedMesh. An InstancedMesh + instanceColor
+  // turned out to silently fail to render on some real mobile GPUs/WebGL
+  // drivers — the environment and even the individually-meshed head drew
+  // fine, but the entire instanced body vanished, reported as "the snake's
+  // body disappears". Sprites use the exact same (plain, non-instanced)
+  // rendering path already proven reliable for prey below.
+  const MAX_SEGS=420, segSprites=[];
+  const segCircleTex=getSegCircleTexture(THREE);
+  for(let i=0;i<MAX_SEGS;i++){
+    const mat=new THREE.SpriteMaterial({map:segCircleTex,transparent:true});
+    const sprite=new THREE.Sprite(mat);
+    sprite.visible=false;
+    scene.add(sprite);
+    segSprites.push(sprite);
+  }
 
   // Prey render as billboarded emoji sprites (always face the camera) instead
   // of plain colored balls — the actual rabbit/fish/taxi/etc. icon shows up
@@ -1029,7 +1057,7 @@ function make3DActorMeshes(THREE,scene){
     scene.add(g);
     headPool.push({group:g,mat:headMat});
   }
-  return {segInst,preyPool,headPool};
+  return {segSprites,preyPool,headPool};
 }
 
 function build3DBiome(biomeId){
@@ -1878,48 +1906,45 @@ function render3DFrame(now,dt){
     }
   }
 
-  // Snake segments -> instanced spheres (player + AI), capping per-snake
-  // count so total instances stay bounded. Render every real segment, not
-  // every 2nd — consecutive real segments are at most SEG_DIST (8 world
-  // units) apart (that's the chain-follow clamp), which every sphere's
+  // Snake segments -> billboarded round sprites (player + AI), capping
+  // per-snake count so the pool stays bounded. Render every real segment,
+  // not every 2nd — consecutive real segments are at most SEG_DIST (8 world
+  // units) apart (that's the chain-follow clamp), which every sprite's
   // diameter comfortably covers, so they visually overlap into one
   // continuous body. Skipping every other one relied on segments normally
   // sitting *closer* than that (they do at base speed), so it broke exactly
   // when something moved faster than usual — boost doubles speed, which
   // widens real segment spacing enough that the *sampled* (every-2nd) gap
-  // exceeded the sphere size and the body visibly fell apart into beads,
+  // exceeded the sprite size and the body visibly fell apart into beads,
   // worst on a short/thin fresh-spawn snake.
-  const m=new THREE.Matrix4(),col=new THREE.Color();
+  const col=new THREE.Color();
   let ii=0;
   const allSnakes=[player,...aiSnakes].filter(s=>s&&s.alive);
   for(const s of allSnakes){
     const n=s.segs.length;
     const step=1, cap=40;
-    for(let k=0,count=0;k<n&&count<cap&&ii<420;k+=step,count++){
+    for(let k=0,count=0;k<n&&count<cap&&ii<st.segSprites.length;k+=step,count++){
       const seg=s.segs[k];
-      // A uniform sphere chain reads as a worm. Flattening it into an oval
-      // (wider than tall, like a real snake's cross-section) and tapering
-      // harder toward the tail — plus a subtly darker band every few
+      // A uniform chain of same-size dots reads as a worm. Tapering the
+      // size harder toward the tail — plus a subtly darker band every few
       // segments to suggest scale patterning — goes a long way toward
       // "snake" instead of "tube of beads".
       const rad=Math.max(2.4,s.rad*(1-k/n*0.55));
-      m.makeScale(rad*1.15,rad*0.8,rad*1.15);
-      m.setPosition(seg.x-st.offX,rad*0.8,seg.y-st.offY);
-      st.segInst.setMatrixAt(ii,m);
+      const sprite=st.segSprites[ii];
+      sprite.visible=true;
+      sprite.position.set(seg.x-st.offX,rad*0.8,seg.y-st.offY);
+      sprite.scale.set(rad*2.3,rad*1.9,1);
       col.set(s.col);
       if(k%4===0)col.offsetHSL(0,0,-0.12);
       // Camouflage used to be a ctx.globalAlpha fade drawn on the 2D canvas
       // only — invisible in 3D, so the ability looked completely dead here.
-      // Dim the body toward black instead, since instanced meshes share one
-      // material and can't vary opacity per-instance.
+      // Dim the body toward black instead to mirror that fade.
       if(s.hideOn)col.multiplyScalar(0.32);
-      st.segInst.setColorAt(ii,col);
+      sprite.material.color.copy(col);
       ii++;
     }
   }
-  st.segInst.count=ii;
-  st.segInst.instanceMatrix.needsUpdate=true;
-  if(st.segInst.instanceColor)st.segInst.instanceColor.needsUpdate=true;
+  for(;ii<st.segSprites.length;ii++)st.segSprites[ii].visible=false;
 
   let pi=0;
   for(const p of preyItems){
