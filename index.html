@@ -1774,6 +1774,11 @@ function render3DFrame(now,dt){
       st.segInst.setMatrixAt(ii,m);
       col.set(s.col);
       if(k%4===0)col.offsetHSL(0,0,-0.12);
+      // Camouflage used to be a ctx.globalAlpha fade drawn on the 2D canvas
+      // only — invisible in 3D, so the ability looked completely dead here.
+      // Dim the body toward black instead, since instanced meshes share one
+      // material and can't vary opacity per-instance.
+      if(s.hideOn)col.multiplyScalar(0.32);
       st.segInst.setColorAt(ii,col);
       ii++;
     }
@@ -1810,7 +1815,21 @@ function render3DFrame(now,dt){
     hp.group.position.set(s.head.x-st.offX,rad*0.8,s.head.y-st.offY);
     hp.group.scale.set(headScale,headScale,headScale);
     hp.group.rotation.y=Math.PI/2-s.angle;
-    hp.mat.color.set(s.col).offsetHSL(0,0,0.18);
+    // The 2D game's only feedback for boost/crush/venom-or-other-special was
+    // a burst of ctx-drawn particles — also invisible in 3D, so all four
+    // ability buttons looked unresponsive here even though boost/crush/venom
+    // still work mechanically (speed, collision force, damage-over-time).
+    // Give each an emissive glow on the head so pressing them reads clearly.
+    if(s.hideOn){
+      hp.mat.color.set(s.col).multiplyScalar(0.32);
+      hp.mat.emissiveIntensity=0;
+    }else{
+      hp.mat.color.set(s.col).offsetHSL(0,0,0.18);
+      if(s.boostOn){hp.mat.emissive.set(0xffee44);hp.mat.emissiveIntensity=0.55;}
+      else if(s.crushOn){hp.mat.emissive.set(0xff4422);hp.mat.emissiveIntensity=0.65;}
+      else if(s.ab.special.on){hp.mat.emissive.set(ABILITIES[s.specialAb].color);hp.mat.emissiveIntensity=0.6;}
+      else hp.mat.emissiveIntensity=0;
+    }
   }
   for(;hi<st.headPool.length;hi++)st.headPool[hi].group.visible=false;
 
