@@ -1246,9 +1246,9 @@ function buildJungleWorldOnce(){
   const scene=new THREE.Scene();
   scene.background=new THREE.Color(0x0a1408);
   scene.fog=new THREE.FogExp2(0x0a1408,0.0028);
-  scene.add(new THREE.HemisphereLight(0x7ab058,0x2a3810,2.6));
-  scene.add(new THREE.AmbientLight(0x3a5a28,2.0));
-  const sun=new THREE.DirectionalLight(0xd8ffc0,1.7);
+  scene.add(new THREE.HemisphereLight(0x7ab058,0x2a3810,3.2));
+  scene.add(new THREE.AmbientLight(0x3a5a28,2.6));
+  const sun=new THREE.DirectionalLight(0xd8ffc0,2.1);
   sun.position.set(350,600,200);
   scene.add(sun);
 
@@ -2054,12 +2054,15 @@ function resolve3DCollision(snake,nh,now){
 // ═══════════════════════════════════════════
 // SNAKE FORMS (evolve with level)
 // ═══════════════════════════════════════════
+// Each evolution tier also carries a distinct snake body color — starting
+// from the classic mint-green look, then progressing through metal/gem
+// tiers (silver, bronze, gold, diamond) as the player levels up in-match.
 const SNAKE_FORMS=[
-  {minLv:1,  name:'Anaconda',    headScale:1.45, eyeStyle:'normal',  twoHeads:false, colMult:1.0,  glowCol:'#00ffaa'},
-  {minLv:3,  name:'Giant Boa',   headScale:1.55, eyeStyle:'normal',  twoHeads:false, colMult:1.1,  glowCol:'#44ff44'},
-  {minLv:5,  name:'Cobra',       headScale:1.55, eyeStyle:'cobra',   twoHeads:false, colMult:1.2,  glowCol:'#ffcc00'},
-  {minLv:7,  name:'King Cobra',  headScale:1.65, eyeStyle:'cobra',   twoHeads:false, colMult:1.3,  glowCol:'#ff8800'},
-  {minLv:9,  name:'Twin Cobra',  headScale:1.75, eyeStyle:'cobra',   twoHeads:true,  colMult:1.4,  glowCol:'#ff2200'},
+  {minLv:1,  name:'Anaconda',    headScale:1.45, eyeStyle:'normal',  twoHeads:false, colMult:1.0,  glowCol:'#00ffaa', col:'#00ffaa', darkCol:'#003322'},
+  {minLv:3,  name:'Giant Boa',   headScale:1.55, eyeStyle:'normal',  twoHeads:false, colMult:1.1,  glowCol:'#44ff44', col:'#d0d4dc', darkCol:'#2a2c30'},
+  {minLv:5,  name:'Cobra',       headScale:1.55, eyeStyle:'cobra',   twoHeads:false, colMult:1.2,  glowCol:'#ffcc00', col:'#cd7f32', darkCol:'#291a0a'},
+  {minLv:7,  name:'King Cobra',  headScale:1.65, eyeStyle:'cobra',   twoHeads:false, colMult:1.3,  glowCol:'#ff8800', col:'#ffd700', darkCol:'#332b00'},
+  {minLv:9,  name:'Twin Cobra',  headScale:1.75, eyeStyle:'cobra',   twoHeads:true,  colMult:1.4,  glowCol:'#ff2200', col:'#b9f2ff', darkCol:'#253033'},
 ];
 
 function getSnakeForm(lv){
@@ -3618,6 +3621,12 @@ function checkInGameLevel(){
     applyLevelReward(inGameLevel);
     showLevelUp(inGameLevel);
     snd('kill'); // fanfare
+    // Snake body color follows the new evolution tier (mint -> silver ->
+    // bronze -> gold -> diamond) so leveling up is visibly rewarding.
+    if(player){
+      const form=getSnakeForm(inGameLevel);
+      player.col=form.col;player.darkCol=form.darkCol;
+    }
   }
 }
 
@@ -3816,9 +3825,14 @@ function initGame(){
 
   buildWorld();
 
-  // Player — snake color reflects the account's current rank tier
+  // Player — snake color reflects the current evolution tier (form), not
+  // the account rank; it starts at the base mint-green look and changes
+  // through silver/bronze/gold/diamond as the player levels up in-match
+  // (see checkInGameLevel). The account rank tier still picks the AI color
+  // pool below and the menu avatar border, just not the player's own color.
   const rankTier=getRankTier(stats.level||1);
-  player=new Snake(WW/2,WH/2,SNAKE_COLORS[rankTier.colorIdx],true,'YOU',selectedAbility);
+  const startForm=getSnakeForm(1);
+  player=new Snake(WW/2,WH/2,{h:startForm.col,d:startForm.darkCol},true,'YOU',selectedAbility);
   // Update ability icon
   const ab=ABILITIES[selectedAbility];
   document.getElementById('ab-special-icon').textContent=ab.icon;
