@@ -1375,7 +1375,7 @@ function render3DFrame(now,dt){
   if(player&&player.alive){
     const hx=player.head.x-st.offX, hz=player.head.y-st.offY;
     const ang=player.angle;
-    const dist=130+player.rad*3, height=260+player.rad*6;
+    const dist=195+player.rad*4.5, height=390+player.rad*9;
     const desiredX=hx-Math.cos(ang)*dist, desiredZ=hz-Math.sin(ang)*dist, desiredY=height;
     if(!st.camInit){
       camera.position.set(desiredX,desiredY,desiredZ);
