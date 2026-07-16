@@ -215,6 +215,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--dark);color:va
 #sg{display:none;position:fixed;inset:0}
 #sg.active{display:block;opacity:1}
 #gc{position:absolute;inset:0;width:100%;height:100%}
+#gc3d{position:absolute;inset:0;width:100%;height:100%;display:none}
 
 /* ── HUD — PUBG Style ── */
 /* Top bar: Alive + Zone + Score merged into one translucent bar instead of three boxes */
@@ -620,6 +621,7 @@ html,body{position:fixed;width:100%;height:100%;overflow:hidden}
 <!-- ═══════════════ GAME ═══════════════ -->
 <div id="sg" class="screen">
   <canvas id="gc"></canvas>
+  <canvas id="gc3d"></canvas>
 
   <!-- HUD Top -->
 <!-- Pause overlay -->
@@ -887,21 +889,342 @@ const BIOMES=[
      {e:'⭐',n:'Star',p:30,r:9,s:2.0,c:'#ffee44'},
      {e:'🪐',n:'Meteor',p:60,r:14,s:.6,c:'#aa88ff'},
    ]},
+  {id:'snow',     name:'❄️ FROZEN TUNDRA',  bgTop:'#0a1420',bgBot:'#050a10',
+   fogCol:'rgba(10,18,28,', fogStr:.5, acCol:'#66ccff',
+   groundCols:['#c8dce8','#a8c4d8','#d8e8f0','#98b4c8','#b8d0e0'],
+   pray:[
+     {e:'🐇',n:'Snow Hare',p:20,r:9,s:1.5,c:'#e8f0f8'},
+     {e:'🦊',n:'Arctic Fox',p:30,r:10,s:1.6,c:'#f0f0f0'},
+     {e:'🐧',n:'Penguin',p:25,r:9,s:.9,c:'#222233'},
+     {e:'🦣',n:'Mammoth Calf',p:55,r:15,s:.5,c:'#7a5a3a'},
+   ]},
+  {id:'cave',     name:'🕳️ CRYSTAL CAVERNS',bgTop:'#0c0a14',bgBot:'#05040a',
+   fogCol:'rgba(10,8,18,', fogStr:.75, acCol:'#aa66ff',
+   groundCols:['#2a2438','#221c30','#332c44','#1c1828','#3a3050'],
+   pray:[
+     {e:'🦇',n:'Bat',p:18,r:8,s:2.0,c:'#4a3a5a'},
+     {e:'🕷️',n:'Cave Spider',p:22,r:8,s:1.3,c:'#2a2030'},
+     {e:'💎',n:'Crystal Bug',p:35,r:9,s:1.0,c:'#88ccff'},
+     {e:'🐛',n:'Glowworm',p:15,r:7,s:.6,c:'#aaff66'},
+   ]},
+  // NYC is rendered in real 3D (WebGL) instead of the 2D canvas — see the
+  // "NYC 3D BIOME" section below. bgTop/groundCols etc. are unused for it
+  // (kept only so this entry has the same shape as every other biome).
+  {id:'nyc',      name:'🗽 NEW YORK CITY',   bgTop:'#0d1730',bgBot:'#05040a',
+   fogCol:'rgba(13,23,48,', fogStr:.5, acCol:'#ffd67a',
+   groundCols:['#24262c','#2a2c32','#1e2024','#302f34','#26282e'],
+   pray:[
+     {e:'🐦',n:'Pigeon',p:15,r:7,s:1.6,c:'#8a8a90'},
+     {e:'🐀',n:'Rat',p:12,r:7,s:1.8,c:'#5a5248'},
+     {e:'🌭',n:'Hot Dog Cart',p:35,r:10,s:0,c:'#cc4422'},
+     {e:'🚕',n:'Taxi',p:40,r:11,s:1.2,c:'#ffcc22'},
+   ]},
 ];
 
 // Current biome
 let currentBiome=BIOMES[0];
-// Biome visit order for the current match. Jungle (0) always opens the match,
-// but the remaining 4 biomes are shuffled each game so repeat playthroughs
-// don't always see the exact same jungle->ocean->desert->volcano->space order.
+// Biome visit order for the current match. Jungle (0) always opens the match;
+// the other 4 phases are filled by drawing 4 of the remaining biomes at random
+// each game, so repeat playthroughs don't always see the same biomes in the
+// same order, and the pool can keep growing without lengthening a match.
 let biomeOrder=[0,1,2,3,4];
 function shuffleBiomeOrder(){
-  const rest=[1,2,3,4];
+  const rest=[1,2,3,4,5,6,7];
   for(let i=rest.length-1;i>0;i--){
     const j=Math.floor(Math.random()*(i+1));
     [rest[i],rest[j]]=[rest[j],rest[i]];
   }
-  biomeOrder=[0,...rest];
+  biomeOrder=[0,...rest.slice(0,4)];
+}
+
+// ═══════════════════════════════════════════
+// NYC 3D BIOME — real WebGL city driven by the actual game state (player/AI
+// snake positions, prey, world bounds), not a separate demo. Everything else
+// in the game stays 2D canvas; only this biome swaps the rendering path.
+// ═══════════════════════════════════════════
+let NYC=null;          // {THREE,renderer,scene,camera,built,buildingRects,segInst,preyInst,taxis,...}
+let nycLoadPromise=null;
+
+function ensureNYC3D(){
+  if(NYC)return Promise.resolve(NYC);
+  if(nycLoadPromise)return nycLoadPromise;
+  nycLoadPromise=import('./assets/three-bundle.min.js').then(mod=>{
+    const THREE=mod.THREE;
+    const canvas3d=document.getElementById('gc3d');
+    const renderer=new THREE.WebGLRenderer({canvas:canvas3d,antialias:true});
+    renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+    renderer.setSize(innerWidth,innerHeight);
+    const scene=new THREE.Scene();
+    scene.background=new THREE.Color(0x0d1730);
+    scene.fog=new THREE.FogExp2(0x0d1730,0.0035);
+    const camera=new THREE.PerspectiveCamera(60,innerWidth/innerHeight,1,4000);
+    scene.add(new THREE.HemisphereLight(0x3a5580,0x181410,1.6));
+    scene.add(new THREE.AmbientLight(0x2a3a55,1.5));
+    const moon=new THREE.DirectionalLight(0x9fc0ff,1.2);
+    moon.position.set(-400,600,-300);
+    scene.add(moon);
+    NYC={THREE,BufferGeometryUtils:mod.BufferGeometryUtils,renderer,scene,camera,built:false,buildingRects:[],taxis:[],lastW:innerWidth,lastH:innerHeight};
+    return NYC;
+  });
+  return nycLoadPromise;
+}
+
+// Builds the city once (world coords, matching WW x WH exactly) and caches it
+// — the layout doesn't need to regenerate on repeat visits within a session.
+function buildNYCCityOnce(){
+  if(!NYC||NYC.built)return;
+  const {THREE,scene}=NYC;
+  // Streets are wide and buildings occupy less than their full cell — unlike
+  // a car bound to lanes, this snake can approach from any angle, so the gaps
+  // between buildings need to be generous, not just the rendered street strip.
+  const BLOCK=200,STREET_W=40,GRID_N=Math.round(WW/BLOCK); // 16 blocks covers WW=3200 exactly
+  NYC.offX=WW/2; NYC.offY=WH/2; // 3D scene is centered at 0,0; game world is 0..WW/0..WH
+
+  const groundGeo=new THREE.PlaneGeometry(WW,WH);
+  const ground=new THREE.Mesh(groundGeo,new THREE.MeshStandardMaterial({color:0x24262c,roughness:1}));
+  ground.rotation.x=-Math.PI/2;
+  scene.add(ground);
+
+  function laneTexture(){
+    const c=document.createElement('canvas');c.width=64;c.height=64;
+    const g=c.getContext('2d');
+    g.fillStyle='#2a2c32';g.fillRect(0,0,64,64);
+    g.fillStyle='#d8c860';g.fillRect(28,4,8,24);g.fillRect(28,36,8,24);
+    const tex=new THREE.CanvasTexture(c);tex.wrapS=tex.wrapT=THREE.RepeatWrapping;
+    tex.repeat.set(1,WH/64);
+    return tex;
+  }
+  const half=WW/2;
+  const hGeos=[],vGeos=[];
+  for(let i=0;i<=GRID_N;i++){
+    const pos=-half+i*BLOCK;
+    const hGeo=new THREE.PlaneGeometry(STREET_W,WH);
+    hGeo.rotateX(-Math.PI/2);hGeo.rotateY(Math.PI/2);hGeo.translate(pos,0.02,0);
+    hGeos.push(hGeo);
+    const vGeo=new THREE.PlaneGeometry(STREET_W,WW);
+    vGeo.rotateX(-Math.PI/2);vGeo.translate(0,0.03,pos);
+    vGeos.push(vGeo);
+  }
+  const streetMat=new THREE.MeshStandardMaterial({map:laneTexture(),roughness:1});
+  scene.add(new THREE.Mesh(NYC.BufferGeometryUtils.mergeGeometries(hGeos),streetMat));
+  scene.add(new THREE.Mesh(NYC.BufferGeometryUtils.mergeGeometries(vGeos),streetMat));
+
+  // Shared pool of window-lit facade textures — a unique canvas per building
+  // (~200+ of them) was the biggest startup cost, so bake a small pool once
+  // and reuse it (buildings still look varied since size/height/color differ).
+  const TEX_POOL_SIZE=10;
+  function buildingTextures(seed){
+    const base=['#2b2f3a','#33303a','#2a3038','#302b34'][seed%4];
+    const fc=document.createElement('canvas');fc.width=64;fc.height=128;
+    const fg=fc.getContext('2d');fg.fillStyle=base;fg.fillRect(0,0,64,128);
+    const ec=document.createElement('canvas');ec.width=64;ec.height=128;
+    const eg=ec.getContext('2d');eg.fillStyle='#000000';eg.fillRect(0,0,64,128);
+    for(let y=6;y<128;y+=10){
+      for(let x=4;x<64;x+=10){
+        const lit=Math.random()<0.45;
+        fg.fillStyle=lit?'#8a7a50':'#1a1c22';fg.fillRect(x,y,5,6);
+        if(lit){eg.fillStyle='#ffd67a';eg.fillRect(x,y,5,6);}
+      }
+    }
+    const facadeTex=new THREE.CanvasTexture(fc),emissiveTex=new THREE.CanvasTexture(ec);
+    facadeTex.wrapS=facadeTex.wrapT=THREE.RepeatWrapping;
+    emissiveTex.wrapS=emissiveTex.wrapT=THREE.RepeatWrapping;
+    return {facadeTex,emissiveTex};
+  }
+  const texPool=[];
+  for(let i=0;i<TEX_POOL_SIZE;i++)texPool.push(buildingTextures(i));
+  const buildingColors=[0x555a66,0x4a4e58,0x5c5248,0x3f4a52,0x50464e];
+
+  const buildingRoot=new THREE.Group();
+  scene.add(buildingRoot);
+  let seedCounter=0;
+  for(let bx=0;bx<GRID_N;bx++){
+    for(let bz=0;bz<GRID_N;bz++){
+      if(Math.random()<0.12)continue; // occasional plaza gap
+      const cx=bx*BLOCK+BLOCK/2, cz=bz*BLOCK+BLOCK/2; // game-world coords (0..WW)
+      const footprint=BLOCK-STREET_W-2;
+      const w=footprint*(0.4+Math.random()*0.25), d=footprint*(0.4+Math.random()*0.25);
+      const distFromCenter=Math.hypot(bx-GRID_N/2,bz-GRID_N/2);
+      const h=Math.max(6,(GRID_N/2-distFromCenter*0.6))*8*(0.6+Math.random()*0.9);
+      const seed=seedCounter++;
+      const {facadeTex,emissiveTex}=texPool[seed%TEX_POOL_SIZE];
+      const fTex=facadeTex.clone(),eTex=emissiveTex.clone();
+      fTex.repeat.set(Math.max(1,Math.round(w/6)),Math.max(1,Math.round(h/8)));
+      eTex.repeat.set(fTex.repeat.x,fTex.repeat.y);
+      fTex.needsUpdate=eTex.needsUpdate=true;
+      const mat=new THREE.MeshStandardMaterial({
+        map:fTex,color:buildingColors[seed%buildingColors.length],
+        emissiveMap:eTex,emissive:0xffffff,emissiveIntensity:1.4,
+        roughness:0.85,metalness:0.05,
+      });
+      const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);
+      const px=cx+(Math.random()-0.5)*1.5, pz=cz+(Math.random()-0.5)*1.5;
+      mesh.position.set(px-NYC.offX,h/2,pz-NYC.offY);
+      buildingRoot.add(mesh);
+      if(Math.random()<0.5){
+        const rw=w*0.4,rd=d*0.4,rh=h*(0.08+Math.random()*0.12);
+        const roof=new THREE.Mesh(new THREE.BoxGeometry(rw,rh,rd),new THREE.MeshStandardMaterial({color:0x3a3d44,roughness:0.9}));
+        roof.position.y=h/2+rh/2;
+        mesh.add(roof);
+      }
+      // Collision footprint in GAME-WORLD coords for gameplay (see resolveNYCCollision)
+      NYC.buildingRects.push({x:px,y:pz,hw:w/2+3,hd:d/2+3});
+    }
+  }
+
+  // Cosmetic taxis — decorative only, not part of collision.
+  function makeTaxi(){
+    const g=new THREE.Group();
+    const body=new THREE.Mesh(new THREE.BoxGeometry(26,11,15),new THREE.MeshStandardMaterial({color:0xffcc22,roughness:0.4,metalness:0.3}));
+    body.position.y=7.5;
+    const cabin=new THREE.Mesh(new THREE.BoxGeometry(14,6,14),new THREE.MeshStandardMaterial({color:0x111318,roughness:0.3}));
+    cabin.position.set(-1,13.5,0);
+    g.add(body,cabin);
+    return g;
+  }
+  for(let i=0;i<10;i++){
+    const t=makeTaxi();
+    const lane=(Math.floor(Math.random()*(GRID_N+1)))*BLOCK-half;
+    const horizontal=Math.random()<0.5;
+    t.userData={horizontal,speed:80+Math.random()*60,dir:Math.random()<0.5?1:-1};
+    if(horizontal){t.position.set(-half,0,lane);t.rotation.y=Math.PI/2;}
+    else{t.position.set(lane,0,-half);}
+    scene.add(t);
+    NYC.taxis.push(t);
+  }
+
+  // Instanced meshes for snake segments and prey — one draw call each instead
+  // of one per segment/prey item.
+  const MAX_SEGS=420;
+  const segGeo=new THREE.SphereGeometry(1,10,10);
+  const segMat=new THREE.MeshStandardMaterial({roughness:0.5});
+  NYC.segInst=new THREE.InstancedMesh(segGeo,segMat,MAX_SEGS);
+  NYC.segInst.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  scene.add(NYC.segInst);
+
+  const MAX_PREY=160;
+  const preyGeo=new THREE.SphereGeometry(1,8,8);
+  const preyMat=new THREE.MeshStandardMaterial({roughness:0.6,emissive:0x222222});
+  NYC.preyInst=new THREE.InstancedMesh(preyGeo,preyMat,MAX_PREY);
+  NYC.preyInst.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  scene.add(NYC.preyInst);
+
+  NYC.built=true;
+}
+
+function showNYC3D(){
+  document.getElementById('gc').style.display='none';
+  document.getElementById('gc3d').style.display='block';
+}
+function hideNYC3D(){
+  document.getElementById('gc3d').style.display='none';
+  document.getElementById('gc').style.display='block';
+}
+
+function renderNYC3DFrame(now,dt){
+  const {THREE,renderer,scene,camera}=NYC;
+  if(innerWidth!==NYC.lastW||innerHeight!==NYC.lastH){
+    NYC.lastW=innerWidth;NYC.lastH=innerHeight;
+    camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth,innerHeight);
+  }
+
+  // Taxis cruise their street forever, wrapping at the world edge.
+  const half=WW/2;
+  for(const t of NYC.taxis){
+    const d=t.userData;
+    if(d.horizontal){
+      t.position.x+=d.dir*d.speed*dt;
+      if(t.position.x>half+20)t.position.x=-half-20;
+      if(t.position.x<-half-20)t.position.x=half+20;
+    }else{
+      t.position.z+=d.dir*d.speed*dt;
+      if(t.position.z>half+20)t.position.z=-half-20;
+      if(t.position.z<-half-20)t.position.z=half+20;
+    }
+  }
+
+  // Snake segments -> instanced spheres (player + AI), stepping every 2nd
+  // segment and capping per-snake count so total instances stay bounded.
+  const m=new THREE.Matrix4(),col=new THREE.Color();
+  let ii=0;
+  const allSnakes=[player,...aiSnakes].filter(s=>s&&s.alive);
+  for(const s of allSnakes){
+    const n=s.segs.length;
+    const step=2, cap=40;
+    for(let k=0,count=0;k<n&&count<cap&&ii<420;k+=step,count++){
+      const seg=s.segs[k];
+      const rad=Math.max(3,s.rad*(1-k/n*0.3));
+      m.makeScale(rad,rad,rad);
+      m.setPosition(seg.x-NYC.offX,rad,seg.y-NYC.offY);
+      NYC.segInst.setMatrixAt(ii,m);
+      col.set(s.col);
+      NYC.segInst.setColorAt(ii,col);
+      ii++;
+    }
+  }
+  NYC.segInst.count=ii;
+  NYC.segInst.instanceMatrix.needsUpdate=true;
+  if(NYC.segInst.instanceColor)NYC.segInst.instanceColor.needsUpdate=true;
+
+  let pi=0;
+  for(const p of preyItems){
+    if(pi>=160)break;
+    m.makeScale(p.r,p.r,p.r);
+    m.setPosition(p.x-NYC.offX,p.r,p.y-NYC.offY);
+    NYC.preyInst.setMatrixAt(pi,m);
+    col.set(p.scared?'#ff8844':p.c);
+    NYC.preyInst.setColorAt(pi,col);
+    pi++;
+  }
+  NYC.preyInst.count=pi;
+  NYC.preyInst.instanceMatrix.needsUpdate=true;
+  if(NYC.preyInst.instanceColor)NYC.preyInst.instanceColor.needsUpdate=true;
+
+  // Chase camera: behind and above the player, looking slightly ahead of the
+  // head along its current heading.
+  if(player&&player.alive){
+    const hx=player.head.x-NYC.offX, hz=player.head.y-NYC.offY;
+    const ang=player.angle;
+    const desiredX=hx-Math.cos(ang)*95, desiredZ=hz-Math.sin(ang)*95, desiredY=110;
+    if(!NYC.camInit){
+      camera.position.set(desiredX,desiredY,desiredZ);
+      NYC.camInit=true;
+    }else{
+      camera.position.x=lp(camera.position.x,desiredX,.08);
+      camera.position.y=lp(camera.position.y,desiredY,.08);
+      camera.position.z=lp(camera.position.z,desiredZ,.08);
+    }
+    const lookX=hx+Math.cos(ang)*40, lookZ=hz+Math.sin(ang)*40;
+    camera.lookAt(lookX,8,lookZ);
+  }
+
+  renderer.render(scene,camera);
+}
+
+// Building collision: pushes a snake's proposed next head position (nh) back
+// out of any overlapping building footprint, like a wall. Called only while
+// the NYC biome is active and the city has finished building.
+function resolveNYCCollision(snake,nh,now){
+  for(const r of NYC.buildingRects){
+    const dx=nh.x-r.x, dy=nh.y-r.y;
+    if(Math.abs(dx)>r.hw||Math.abs(dy)>r.hd)continue;
+    // Inside the footprint — push out along whichever axis needs less travel.
+    const pushX=r.hw-Math.abs(dx), pushY=r.hd-Math.abs(dy);
+    if(pushX<pushY) nh.x=r.x+(dx<0?-r.hw:r.hw);
+    else nh.y=r.y+(dy<0?-r.hd:r.hd);
+    snake.vx*=-0.4; snake.vy*=-0.4;
+    // Free-roam movement (unlike a car) means grazing a building's edge is
+    // normal, not a rare event — deal impact damage at most once per 500ms
+    // instead of every single frame while the head rests against the wall,
+    // or a graze deletes the player's HP bar in a couple of seconds.
+    if(snake.isP&&now>=(snake._nycHitCd||0)){
+      snake.hp-=6;
+      shakeAmt=Math.max(shakeAmt,4);
+      snake._nycHitCd=now+500;
+    }
+    break; // one building per frame is enough to unstick the head
+  }
 }
 
 // ═══════════════════════════════════════════
@@ -1583,6 +1906,30 @@ function drawWorld(cx,cy,zm,now){
       ctx.beginPath();ctx.arc(lx,ly,lr,0,Math.PI*2);ctx.fillStyle=lg2;ctx.fill();
     }
   }
+  // Snow: falling snowflakes
+  if(currentBiome.id==='snow'){
+    ctx.fillStyle='#ffffff';
+    for(let s=0;s<90;s++){
+      const sx2=((s*181+now*.03)%W2+W2)%W2;
+      const sy2=((s*97+now*.06)%H2+H2)%H2;
+      const sr2=s%4===0?1.6:.9;
+      ctx.globalAlpha=.3+Math.sin(now*.002+s)*.2;
+      ctx.beginPath();ctx.arc(sx2,sy2,sr2,0,Math.PI*2);ctx.fill();
+    }
+    ctx.globalAlpha=1;
+  }
+  // Cave: glowing crystal glints
+  if(currentBiome.id==='cave'){
+    for(let li=0;li<6;li++){
+      const lx=((li*W2/6)+(Math.sin(now*.0007+li)*40));
+      const ly=((li*H2/6)+(Math.cos(now*.0009+li)*40));
+      const lr=rnd(25,70)*zm;
+      const lg2=ctx.createRadialGradient(lx,ly,0,lx,ly,lr);
+      lg2.addColorStop(0,`rgba(140,80,255,${.05+Math.sin(now*.002+li)*.03})`);
+      lg2.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.beginPath();ctx.arc(lx,ly,lr,0,Math.PI*2);ctx.fillStyle=lg2;ctx.fill();
+    }
+  }
 
   // Ground texture
   if(groundCanvas){
@@ -1952,6 +2299,7 @@ class Snake{
     if(nh.x>WW-30){nh.x=WW-30;this.vx=-Math.abs(this.vx);this.ta=Math.PI;}
     if(nh.y<30){nh.y=30;this.vy=Math.abs(this.vy);this.ta=Math.PI/2;}
     if(nh.y>WH-30){nh.y=WH-30;this.vy=-Math.abs(this.vy);this.ta=-Math.PI/2;}
+    if(currentBiome.id==='nyc'&&NYC&&NYC.built)resolveNYCCollision(this,nh,now);
     this.vx*=this.fr;this.vy*=this.fr;
 
     this.segs.unshift(nh);
@@ -2576,9 +2924,18 @@ function switchBiome(biomeIdx){
   document.getElementById('biomeTransForm').textContent=form.name!==lastAnnouncedForm?'🐍 '+form.name+' FORM UNLOCKED':'';
   lastAnnouncedForm=form.name;
   overlay.style.display='flex';
+  // Kick the (lazy, one-time) 3D asset load off now so it has the whole
+  // transition overlay to finish loading in before it's actually shown.
+  if(currentBiome.id==='nyc')ensureNYC3D().then(buildNYCCityOnce);
   // Rebuild world with new biome
   setTimeout(()=>{
-    buildWorld();
+    if(currentBiome.id==='nyc'){
+      if(NYC)NYC.camInit=false;
+      showNYC3D();
+    }else{
+      hideNYC3D();
+      buildWorld();
+    }
     preyItems=[];
     spawnPrey(PREY_COUNT);
     overlay.style.display='none';
@@ -2606,6 +2963,13 @@ function initGame(){
   zonePhase=0;zoneTimer=ZONE_INTERVAL;zoneRadius=WW*.48;
   zoneCenterX=WW/2;zoneCenterY=WH/2;
   shuffleBiomeOrder();
+  // A match always opens on jungle (biomeOrder[0]===0), but currentBiome
+  // otherwise only changes via switchBiome() — without this reset, starting
+  // a new match right after one that ended mid-NYC (or any non-jungle biome)
+  // would leave the 3D canvas/city state active for a match that expects the
+  // 2D jungle opening.
+  currentBiome=BIOMES[0];
+  if(NYC)hideNYC3D();
 
   // Escalating difficulty + more opponents as the account (meta) level climbs
   AI_DIFF=getDifficultyT();
@@ -2779,12 +3143,16 @@ function loop(ts){
 
   resize();
   const dcx=camX+shX/zoom,dcy=camY+shY/zoom;
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  drawWorld(dcx,dcy,zoom,now);
-  drPrey(dcx,dcy,zoom);
-  for(const ai of aiSnakes)if(ai.alive)ai.draw(dcx,dcy,zoom);
-  drParts(dcx,dcy,zoom);
-  if(player&&player.alive)player.draw(dcx,dcy,zoom);
+  if(currentBiome.id==='nyc'&&NYC&&NYC.built){
+    renderNYC3DFrame(now,dt/1000);
+  }else{
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    drawWorld(dcx,dcy,zoom,now);
+    drPrey(dcx,dcy,zoom);
+    for(const ai of aiSnakes)if(ai.alive)ai.draw(dcx,dcy,zoom);
+    drParts(dcx,dcy,zoom);
+    if(player&&player.alive)player.draw(dcx,dcy,zoom);
+  }
   drawMini();
   updXPBar();
 
