@@ -1304,14 +1304,23 @@ function render3DFrame(now,dt){
     }
   }
 
-  // Snake segments -> instanced spheres (player + AI), stepping every 2nd
-  // segment and capping per-snake count so total instances stay bounded.
+  // Snake segments -> instanced spheres (player + AI), capping per-snake
+  // count so total instances stay bounded. Render every real segment, not
+  // every 2nd — consecutive real segments are at most SEG_DIST (8 world
+  // units) apart (that's the chain-follow clamp), which every sphere's
+  // diameter comfortably covers, so they visually overlap into one
+  // continuous body. Skipping every other one relied on segments normally
+  // sitting *closer* than that (they do at base speed), so it broke exactly
+  // when something moved faster than usual — boost doubles speed, which
+  // widens real segment spacing enough that the *sampled* (every-2nd) gap
+  // exceeded the sphere size and the body visibly fell apart into beads,
+  // worst on a short/thin fresh-spawn snake.
   const m=new THREE.Matrix4(),col=new THREE.Color();
   let ii=0;
   const allSnakes=[player,...aiSnakes].filter(s=>s&&s.alive);
   for(const s of allSnakes){
     const n=s.segs.length;
-    const step=2, cap=40;
+    const step=1, cap=40;
     for(let k=0,count=0;k<n&&count<cap&&ii<420;k+=step,count++){
       const seg=s.segs[k];
       const rad=Math.max(3,s.rad*(1-k/n*0.3));
