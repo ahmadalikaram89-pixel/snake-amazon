@@ -1265,11 +1265,11 @@ function buildJungleWorldOnce(){
   if(JUNGLE)return;
   const {THREE}=TD;
   const scene=new THREE.Scene();
-  scene.background=new THREE.Color(0x0a1408);
-  scene.fog=new THREE.FogExp2(0x0a1408,0.0028);
-  scene.add(new THREE.HemisphereLight(0x7ab058,0x2a3810,3.2));
-  scene.add(new THREE.AmbientLight(0x3a5a28,2.6));
-  const sun=new THREE.DirectionalLight(0xd8ffc0,2.1);
+  scene.background=new THREE.Color(0x142c10);
+  scene.fog=new THREE.FogExp2(0x142c10,0.0018);
+  scene.add(new THREE.HemisphereLight(0x9ad078,0x3e5a28,4.0));
+  scene.add(new THREE.AmbientLight(0x4a7838,3.2));
+  const sun=new THREE.DirectionalLight(0xe8ffd0,2.6);
   sun.position.set(350,600,200);
   scene.add(sun);
 
@@ -1940,6 +1940,10 @@ function render3DFrame(now,dt){
     const uvAttr=mesh.geometry.attributes.uv;
     const uvArr=uvAttr.array;
     const RING_SPACING=rad*3.2;
+    // Taper the last few points down toward a point instead of ending in a
+    // hard flat cut — a constant-width ribbon just stops dead at the tail,
+    // which reads as "clipped off" rather than a natural tapering tip.
+    const taperPts=Math.min(5,n-1);
     let cum=0;
     for(let k=0;k<n;k++){
       const seg=s.segs[k];
@@ -1952,9 +1956,14 @@ function render3DFrame(now,dt){
       else{dx=seg.x-s.segs[k-1].x;dz=seg.y-s.segs[k-1].y;}
       const dl=Math.hypot(dx,dz)||1;
       const rx=-dz/dl, rz=dx/dl;
+      let localRad=rad;
+      if(taperPts>0&&k>=n-taperPts){
+        const t=(n-1-k)/taperPts;
+        localRad=rad*Math.max(0.15,t);
+      }
       const y=rad*0.8;
-      arr[k*6+0]=px+rx*rad; arr[k*6+1]=y; arr[k*6+2]=pz+rz*rad;
-      arr[k*6+3]=px-rx*rad; arr[k*6+4]=y; arr[k*6+5]=pz-rz*rad;
+      arr[k*6+0]=px+rx*localRad; arr[k*6+1]=y; arr[k*6+2]=pz+rz*localRad;
+      arr[k*6+3]=px-rx*localRad; arr[k*6+4]=y; arr[k*6+5]=pz-rz*localRad;
       // Arc-length-based V coordinate (not just k/n) so the ring/scale
       // pattern's real-world spacing stays constant regardless of how long
       // the snake is, instead of stretching or compressing to fit.
