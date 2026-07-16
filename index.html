@@ -1323,11 +1323,17 @@ function render3DFrame(now,dt){
     const step=1, cap=40;
     for(let k=0,count=0;k<n&&count<cap&&ii<420;k+=step,count++){
       const seg=s.segs[k];
-      const rad=Math.max(3,s.rad*(1-k/n*0.3));
-      m.makeScale(rad,rad,rad);
-      m.setPosition(seg.x-st.offX,rad,seg.y-st.offY);
+      // A uniform sphere chain reads as a worm. Flattening it into an oval
+      // (wider than tall, like a real snake's cross-section) and tapering
+      // harder toward the tail — plus a subtly darker band every few
+      // segments to suggest scale patterning — goes a long way toward
+      // "snake" instead of "tube of beads".
+      const rad=Math.max(2.4,s.rad*(1-k/n*0.55));
+      m.makeScale(rad*1.15,rad*0.8,rad*1.15);
+      m.setPosition(seg.x-st.offX,rad*0.8,seg.y-st.offY);
       st.segInst.setMatrixAt(ii,m);
       col.set(s.col);
+      if(k%4===0)col.offsetHSL(0,0,-0.12);
       st.segInst.setColorAt(ii,col);
       ii++;
     }
@@ -1358,8 +1364,11 @@ function render3DFrame(now,dt){
     const hp=st.headPool[hi++];
     const rad=s.rad;
     hp.group.visible=true;
-    hp.group.position.set(s.head.x-st.offX,rad,s.head.y-st.offY);
-    hp.group.scale.set(rad,rad,rad);
+    // A real snake's head reads as distinctly wider than its neck — scale
+    // it up beyond the first body segment's radius rather than matching it.
+    const headScale=rad*1.3;
+    hp.group.position.set(s.head.x-st.offX,rad*0.8,s.head.y-st.offY);
+    hp.group.scale.set(headScale,headScale,headScale);
     hp.group.rotation.y=Math.PI/2-s.angle;
     hp.mat.color.set(s.col).offsetHSL(0,0,0.18);
   }
