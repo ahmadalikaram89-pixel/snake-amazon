@@ -946,12 +946,13 @@ function shuffleBiomeOrder(){
 // first time a match enters it. Biomes not in THREED_BIOMES keep using the
 // original 2D canvas path untouched.
 // ═══════════════════════════════════════════
-const THREED_BIOMES=new Set(['nyc','jungle','ocean']);
+const THREED_BIOMES=new Set(['nyc','jungle','ocean','desert']);
 let TD=null;            // shared: {THREE,BufferGeometryUtils,renderer,camera,lastW,lastH}
 let tdLoadPromise=null;
 let NYC=null;            // {scene,offX,offY,obstacles,segInst,preyPool,taxis,camInit}
 let JUNGLE=null;         // {scene,offX,offY,obstacles,segInst,preyPool,camInit}
 let OCEAN=null;          // {scene,offX,offY,obstacles,segInst,preyPool,fish,camInit}
+let DESERT=null;         // {scene,offX,offY,obstacles,segInst,preyPool,tumbleweeds,camInit}
 
 function ensure3D(){
   if(TD)return Promise.resolve(TD);
@@ -1033,11 +1034,13 @@ function build3DBiome(biomeId){
   if(biomeId==='nyc')buildNYCCityOnce();
   else if(biomeId==='jungle')buildJungleWorldOnce();
   else if(biomeId==='ocean')buildOceanWorldOnce();
+  else if(biomeId==='desert')buildDesertWorldOnce();
 }
 function get3D(biomeId){
   if(biomeId==='nyc')return NYC;
   if(biomeId==='jungle')return JUNGLE;
   if(biomeId==='ocean')return OCEAN;
+  if(biomeId==='desert')return DESERT;
   return null;
 }
 
@@ -1396,6 +1399,119 @@ function buildOceanWorldOnce(){
   Object.assign(OCEAN,make3DActorMeshes(THREE,scene));
 }
 
+// Builds the desert once: bright warm daylight and long clear sightlines
+// (a desert has nothing to hide behind, unlike a jungle canopy or ocean
+// fog), cacti as solid circular obstacles, decorative sun-bleached rocks,
+// and tumbleweeds rolling across the sand (the desert's answer to NYC's
+// taxis / ocean's fish).
+function buildDesertWorldOnce(){
+  if(DESERT)return;
+  const {THREE}=TD;
+  const scene=new THREE.Scene();
+  scene.background=new THREE.Color(0xd9a85c);
+  scene.fog=new THREE.FogExp2(0xd9a85c,0.0016);
+  scene.add(new THREE.HemisphereLight(0xfff0c0,0x8a6828,2.0));
+  scene.add(new THREE.AmbientLight(0x6a4a1a,1.1));
+  const sun=new THREE.DirectionalLight(0xfff4d0,1.6);
+  sun.position.set(300,700,-200);
+  scene.add(sun);
+
+  DESERT={scene,offX:WW/2,offY:WH/2,obstacles:[],tumbleweeds:[],camInit:false};
+
+  function sandTexture(){
+    const c=document.createElement('canvas');c.width=128;c.height=128;
+    const g=c.getContext('2d');
+    g.fillStyle='#c89858';g.fillRect(0,0,128,128);
+    const patches=['#b8863f','#d4a868','#a87830','#e0b878'];
+    for(let i=0;i<220;i++){
+      const x=Math.random()*128,y=Math.random()*128,r=1.5+Math.random()*9;
+      g.fillStyle=patches[i%patches.length];g.globalAlpha=0.3+Math.random()*0.3;
+      g.beginPath();g.arc(x,y,r,0,Math.PI*2);g.fill();
+    }
+    g.globalAlpha=1;
+    const tex=new THREE.CanvasTexture(c);
+    tex.wrapS=tex.wrapT=THREE.RepeatWrapping;tex.repeat.set(WW/128,WH/128);
+    return tex;
+  }
+  const ground=new THREE.Mesh(new THREE.PlaneGeometry(WW,WH),new THREE.MeshStandardMaterial({map:sandTexture(),roughness:1}));
+  ground.rotation.x=-Math.PI/2;
+  scene.add(ground);
+
+  // Low, wide dunes — decorative only, gentle rolling silhouette on the
+  // horizon rather than a hazard.
+  const duneGeo=new THREE.SphereGeometry(1,10,6);
+  for(let i=0;i<40;i++){
+    const dx=rnd(100,WW-100), dz=rnd(100,WH-100);
+    const dr=rnd(40,90);
+    const dune=new THREE.Mesh(duneGeo,new THREE.MeshStandardMaterial({color:0xc89858,roughness:1}));
+    dune.scale.set(dr,dr*0.22,dr);
+    dune.position.set(dx-DESERT.offX,-dr*0.12,dz-DESERT.offY);
+    scene.add(dune);
+  }
+
+  // Cacti: solid circular obstacles — trunk + one or two curved arms.
+  const trunkGeo=new THREE.CylinderGeometry(1,1.15,1,8);
+  const cactusColors=[0x3a7a2a,0x2f6a22,0x458a34];
+  const cactusRoot=new THREE.Group();
+  scene.add(cactusRoot);
+  const NUM_CACTI=110;
+  for(let i=0;i<NUM_CACTI;i++){
+    const cx=rnd(120,WW-120), cz=rnd(120,WH-120);
+    const trunkH=rnd(26,48), trunkR=rnd(5,8);
+    const col=cactusColors[i%cactusColors.length];
+    const mat=new THREE.MeshStandardMaterial({color:col,roughness:0.85});
+    const trunk=new THREE.Mesh(trunkGeo,mat);
+    trunk.scale.set(trunkR,trunkH,trunkR);
+    trunk.position.set(cx-DESERT.offX,trunkH/2,cz-DESERT.offY);
+    const armCount=ri(0,2);
+    for(let a=0;a<armCount;a++){
+      const armH=trunkH*rnd(0.3,0.5), armR=trunkR*0.55;
+      const arm=new THREE.Mesh(trunkGeo,mat);
+      arm.scale.set(armR,armH,armR);
+      const side=a===0?1:-1;
+      arm.position.set(side*trunkR*1.4,armH*0.15,0);
+      arm.rotation.z=side*0.5;
+      trunk.add(arm);
+    }
+    cactusRoot.add(trunk);
+    DESERT.obstacles.push({shape:'circle',x:cx,y:cz,radius:trunkR+8});
+  }
+
+  // Sun-bleached rocks — decorative only.
+  const rockGeo=new THREE.IcosahedronGeometry(1,0);
+  for(let i=0;i<50;i++){
+    const rx=rnd(100,WW-100), rz=rnd(100,WH-100);
+    const rock=new THREE.Mesh(rockGeo,new THREE.MeshStandardMaterial({color:0x9a8060,roughness:0.95}));
+    const rr=rnd(8,18);
+    rock.scale.set(rr,rr*rnd(0.6,0.9),rr);
+    rock.rotation.set(Math.random()*Math.PI,Math.random()*Math.PI,Math.random()*Math.PI);
+    rock.position.set(rx-DESERT.offX,rr*0.3,rz-DESERT.offY);
+    scene.add(rock);
+  }
+
+  // Tumbleweeds: rolling decorations that wander and spin, wrapping at the
+  // world edge like the ocean's fish.
+  function makeTumbleweed(){
+    const g=new THREE.Group();
+    const mat=new THREE.MeshStandardMaterial({color:0x8a6838,roughness:1,wireframe:true});
+    const ball=new THREE.Mesh(new THREE.IcosahedronGeometry(1,1),mat);
+    g.add(ball);
+    return g;
+  }
+  for(let i=0;i<10;i++){
+    const tw=makeTumbleweed();
+    const tx=rnd(150,WW-150), tz=rnd(150,WH-150);
+    const tr=rnd(8,14);
+    tw.scale.set(tr,tr,tr);
+    tw.position.set(tx-DESERT.offX,tr,tz-DESERT.offY);
+    tw.userData={angle:Math.random()*Math.PI*2,speed:25+Math.random()*35,turnT:Math.random()*Math.PI*2};
+    scene.add(tw);
+    DESERT.tumbleweeds.push(tw);
+  }
+
+  Object.assign(DESERT,make3DActorMeshes(THREE,scene));
+}
+
 function show3D(){
   document.getElementById('gc').style.display='none';
   document.getElementById('gc3d').style.display='block';
@@ -1448,6 +1564,24 @@ function render3DFrame(now,dt){
       if(f.position.x<-half)f.position.x=half;
       if(f.position.z>half)f.position.z=-half;
       if(f.position.z<-half)f.position.z=half;
+    }
+  }
+
+  // Desert-only decoration: tumbleweeds roll and spin as they wander.
+  if(currentBiome.id==='desert'){
+    const half=WW/2;
+    for(const tw of st.tumbleweeds){
+      const d=tw.userData;
+      d.turnT+=dt;
+      d.angle+=Math.sin(d.turnT*0.5)*dt*0.6;
+      tw.position.x+=Math.cos(d.angle)*d.speed*dt;
+      tw.position.z+=Math.sin(d.angle)*d.speed*dt;
+      tw.rotation.x+=d.speed*dt*0.05;
+      tw.rotation.z+=d.speed*dt*0.03;
+      if(tw.position.x>half)tw.position.x=-half;
+      if(tw.position.x<-half)tw.position.x=half;
+      if(tw.position.z>half)tw.position.z=-half;
+      if(tw.position.z<-half)tw.position.z=half;
     }
   }
 
