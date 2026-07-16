@@ -990,49 +990,67 @@ function getEmojiTexture(THREE,emoji){
   return tex;
 }
 
-// A repeating scale/ring pattern tiled along the body ribbon's length — a
-// white base (so material.color tints it per-snake) with a darker band, so
-// it reads as the classic snake's ringed scale pattern instead of a flat
-// solid strip.
+// A repeating reptile scale pattern tiled both across the body's width and
+// along its length — small overlapping scallop shapes in a brick-offset
+// grid, like the logo's snake — instead of a flat solid strip. White base
+// so material.color still tints it per-snake/per-evolution-tier.
 let _bodyRingTex=null;
 function getBodyRingTexture(THREE){
   if(_bodyRingTex)return _bodyRingTex;
-  const c=document.createElement('canvas');c.width=32;c.height=64;
+  const c=document.createElement('canvas');c.width=48;c.height=48;
   const g=c.getContext('2d');
-  g.fillStyle='#ffffff';g.fillRect(0,0,32,64);
-  g.fillStyle='rgba(0,0,0,0.32)';
-  g.beginPath();g.ellipse(16,58,15,8,0,0,Math.PI*2);g.fill();
+  g.fillStyle='#ffffff';g.fillRect(0,0,48,48);
+  g.fillStyle='rgba(0,0,0,0.22)';
+  g.strokeStyle='rgba(0,0,0,0.5)';
+  g.lineWidth=1.6;
+  const rows=3, sw=24, sh=16;
+  for(let row=-1;row<=rows;row++){
+    const offsetX=(row%2===0)?0:sw/2;
+    for(let col=-1;col<=2;col++){
+      const cx=col*sw+offsetX, cy=row*sh+sh/2;
+      g.beginPath();
+      g.arc(cx,cy,sw*0.55,0.12*Math.PI,0.88*Math.PI);
+      g.fill();g.stroke();
+    }
+  }
   const tex=new THREE.CanvasTexture(c);
-  tex.wrapS=THREE.ClampToEdgeWrapping;
+  tex.wrapS=THREE.RepeatWrapping;
   tex.wrapT=THREE.RepeatWrapping;
+  tex.repeat.set(2,1);
   return _bodyRingTex=tex;
 }
 
 function make3DActorMeshes(THREE,scene){
-  // Snake bodies render as one continuous flat ribbon mesh per snake — a
-  // real triangle strip following the live segment positions, lying flat on
-  // the ground — instead of a chain of separate beads/dots. This recreates
-  // the classic top-down 2D snake's smooth curved silhouette. It's also a
-  // plain (non-instanced) Mesh per snake, same proven-reliable rendering
-  // path as the head below; an InstancedMesh body used earlier silently
-  // failed to render on some real mobile GPUs/WebGL drivers even though the
-  // environment and head drew fine ("the snake's body disappears").
+  // Snake bodies render as one continuous ribbon mesh per snake — a real
+  // triangle strip following the live segment positions — instead of a
+  // chain of separate beads/dots. This recreates the classic top-down 2D
+  // snake's smooth curved silhouette. It's also a plain (non-instanced)
+  // Mesh per snake, same proven-reliable rendering path as the head below;
+  // an InstancedMesh body used earlier silently failed to render on some
+  // real mobile GPUs/WebGL drivers even though the environment and head
+  // drew fine ("the snake's body disappears").
+  // 3 vertices per point (left/center/right) instead of 2 — a flat 2-vert
+  // ribbon lying on the ground reads as a flat paper cutout from the chase
+  // camera's angle; raising the center vertex gives it a real rounded
+  // cross-section, recomputed normals so it actually shades like a tube.
   const BODY_POOL=16, MAX_PTS=40, bodyPool=[];
   const bodyIndices=[];
   for(let p=0;p<MAX_PTS-1;p++){
-    const a=p*2,b=p*2+1,c=p*2+2,d=p*2+3;
-    bodyIndices.push(a,b,c, b,d,c);
+    const l0=p*3,c0=p*3+1,r0=p*3+2, l1=(p+1)*3,c1=(p+1)*3+1,r1=(p+1)*3+2;
+    bodyIndices.push(l0,c0,l1, l1,c0,c1, c0,r0,c1, c1,r0,r1);
   }
   const bodyRingTex=getBodyRingTexture(THREE);
   for(let i=0;i<BODY_POOL;i++){
     const geo=new THREE.BufferGeometry();
-    const positions=new Float32Array(MAX_PTS*2*3);
+    const positions=new Float32Array(MAX_PTS*3*3);
     geo.setAttribute('position',new THREE.BufferAttribute(positions,3).setUsage(THREE.DynamicDrawUsage));
-    const uvs=new Float32Array(MAX_PTS*2*2);
+    const uvs=new Float32Array(MAX_PTS*3*2);
     geo.setAttribute('uv',new THREE.BufferAttribute(uvs,2).setUsage(THREE.DynamicDrawUsage));
+    const normals=new Float32Array(MAX_PTS*3*3);
+    geo.setAttribute('normal',new THREE.BufferAttribute(normals,3).setUsage(THREE.DynamicDrawUsage));
     geo.setIndex(bodyIndices);
     geo.setDrawRange(0,0);
-    const mat=new THREE.MeshStandardMaterial({roughness:0.6,side:THREE.DoubleSide,map:bodyRingTex});
+    const mat=new THREE.MeshStandardMaterial({roughness:0.4,side:THREE.DoubleSide,map:bodyRingTex});
     const mesh=new THREE.Mesh(geo,mat);
     mesh.visible=false;
     mesh.frustumCulled=false;
@@ -1265,11 +1283,11 @@ function buildJungleWorldOnce(){
   if(JUNGLE)return;
   const {THREE}=TD;
   const scene=new THREE.Scene();
-  scene.background=new THREE.Color(0x0a1408);
-  scene.fog=new THREE.FogExp2(0x0a1408,0.0028);
-  scene.add(new THREE.HemisphereLight(0x7ab058,0x2a3810,3.2));
-  scene.add(new THREE.AmbientLight(0x3a5a28,2.6));
-  const sun=new THREE.DirectionalLight(0xd8ffc0,2.1);
+  scene.background=new THREE.Color(0x142c10);
+  scene.fog=new THREE.FogExp2(0x142c10,0.0018);
+  scene.add(new THREE.HemisphereLight(0x9ad078,0x3e5a28,4.0));
+  scene.add(new THREE.AmbientLight(0x4a7838,3.2));
+  const sun=new THREE.DirectionalLight(0xe8ffd0,2.6);
   sun.position.set(350,600,200);
   scene.add(sun);
 
@@ -1939,7 +1957,11 @@ function render3DFrame(now,dt){
     const arr=posAttr.array;
     const uvAttr=mesh.geometry.attributes.uv;
     const uvArr=uvAttr.array;
-    const RING_SPACING=rad*3.2;
+    const RING_SPACING=rad*0.9;
+    // Taper the last few points down toward a point instead of ending in a
+    // hard flat cut — a constant-width ribbon just stops dead at the tail,
+    // which reads as "clipped off" rather than a natural tapering tip.
+    const taperPts=Math.min(5,n-1);
     let cum=0;
     for(let k=0;k<n;k++){
       const seg=s.segs[k];
@@ -1952,9 +1974,16 @@ function render3DFrame(now,dt){
       else{dx=seg.x-s.segs[k-1].x;dz=seg.y-s.segs[k-1].y;}
       const dl=Math.hypot(dx,dz)||1;
       const rx=-dz/dl, rz=dx/dl;
+      let localRad=rad;
+      if(taperPts>0&&k>=n-taperPts){
+        const t=(n-1-k)/taperPts;
+        localRad=rad*Math.max(0.15,t);
+      }
       const y=rad*0.8;
-      arr[k*6+0]=px+rx*rad; arr[k*6+1]=y; arr[k*6+2]=pz+rz*rad;
-      arr[k*6+3]=px-rx*rad; arr[k*6+4]=y; arr[k*6+5]=pz-rz*rad;
+      const centerRaise=localRad*0.7;
+      arr[k*9+0]=px+rx*localRad; arr[k*9+1]=y; arr[k*9+2]=pz+rz*localRad;
+      arr[k*9+3]=px; arr[k*9+4]=y+centerRaise; arr[k*9+5]=pz;
+      arr[k*9+6]=px-rx*localRad; arr[k*9+7]=y; arr[k*9+8]=pz-rz*localRad;
       // Arc-length-based V coordinate (not just k/n) so the ring/scale
       // pattern's real-world spacing stays constant regardless of how long
       // the snake is, instead of stretching or compressing to fit.
@@ -1963,12 +1992,14 @@ function render3DFrame(now,dt){
         cum+=Math.hypot(seg.x-prev.x,seg.y-prev.y);
       }
       const v=cum/RING_SPACING;
-      uvArr[k*4+0]=0; uvArr[k*4+1]=v;
-      uvArr[k*4+2]=1; uvArr[k*4+3]=v;
+      uvArr[k*6+0]=0; uvArr[k*6+1]=v;
+      uvArr[k*6+2]=0.5; uvArr[k*6+3]=v;
+      uvArr[k*6+4]=1; uvArr[k*6+5]=v;
     }
     posAttr.needsUpdate=true;
     uvAttr.needsUpdate=true;
-    mesh.geometry.setDrawRange(0,(n-1)*6);
+    mesh.geometry.setDrawRange(0,(n-1)*12);
+    mesh.geometry.computeVertexNormals();
     mesh.geometry.computeBoundingSphere();
     mesh.visible=true;
     col.set(s.col);
