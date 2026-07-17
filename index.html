@@ -2036,7 +2036,12 @@ function render3DFrame(now,dt){
     // A real snake's head reads as distinctly wider than its neck — scale
     // it up beyond the first body segment's radius rather than matching it.
     const headScale=rad*1.3;
-    hp.group.position.set(s.head.x-st.offX,rad*0.8,s.head.y-st.offY);
+    // Raised clearly above the body ribbon's own raised center ridge (up to
+    // ~rad*1.5 at its peak) so the head visually passes OVER its own body
+    // instead of getting tucked under it when coiling/looping tightly —
+    // "the head needs to spiral over its own body" — rather than sitting at
+    // the same height and getting z-fought or hidden underneath.
+    hp.group.position.set(s.head.x-st.offX,rad*1.7,s.head.y-st.offY);
     hp.group.scale.set(headScale,headScale,headScale);
     hp.group.rotation.y=Math.PI/2-s.angle;
     // The 2D game's only feedback for boost/crush/venom-or-other-special was
