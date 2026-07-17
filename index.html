@@ -3168,8 +3168,9 @@ class Snake{
       }
     }
 
-    let sp=this.isP?BASE_SPEED:BASE_SPEED*.88;
-    if(this.boostOn)sp=(this.isP?BASE_SPEED:BASE_SPEED*.88)*2.0;
+    // The real player moves noticeably faster than AI snakes (AI unchanged).
+    let sp=this.isP?BASE_SPEED*1.3:BASE_SPEED*.88;
+    if(this.boostOn)sp=(this.isP?BASE_SPEED*1.3:BASE_SPEED*.88)*2.0;
     // Speed stays constant regardless of size
     // sp unchanged - no size penalty or bonus
 
