@@ -1091,7 +1091,32 @@ function make3DActorMeshes(THREE,scene){
     scene.add(g);
     headPool.push({group:g,mat:headMat});
   }
-  return {bodyPool,preyPool,headPool};
+
+  // Outside-the-safe-zone visualization — a dark red ground tint plus a
+  // pulsing border ring, mirroring the 2D canvas's zone-warning fill/ring
+  // (rgba(60,5,5,.55) fill + pulsing red stroke). That only ever draws on
+  // the 2D #gc canvas, which stays hidden while a 3D biome is active, so
+  // the danger zone previously showed no red at all in 3D — just whatever
+  // the ground's own color happened to be. Ring geometry is rebuilt only
+  // when the zone radius actually changes (a few times per match), not
+  // every frame.
+  // fog:false — scene fog otherwise washes a dark, semi-transparent overlay
+  // like this into the ambient fog color at any real distance, defeating
+  // the whole point of a danger-zone warning that should stay visibly red.
+  const zoneFillMat=new THREE.MeshBasicMaterial({color:0x6e0808,transparent:true,opacity:0.55,side:THREE.DoubleSide,depthWrite:false,fog:false});
+  const zoneFillMesh=new THREE.Mesh(new THREE.RingGeometry(1,2,64),zoneFillMat);
+  zoneFillMesh.rotation.x=-Math.PI/2;
+  zoneFillMesh.position.y=2;
+  zoneFillMesh.visible=false;
+  scene.add(zoneFillMesh);
+  const zoneBorderMat=new THREE.MeshBasicMaterial({color:0xff3c3c,transparent:true,opacity:0.6,side:THREE.DoubleSide,depthWrite:false,fog:false});
+  const zoneBorderMesh=new THREE.Mesh(new THREE.RingGeometry(1,2,64),zoneBorderMat);
+  zoneBorderMesh.rotation.x=-Math.PI/2;
+  zoneBorderMesh.position.y=2.5;
+  zoneBorderMesh.visible=false;
+  scene.add(zoneBorderMesh);
+
+  return {bodyPool,preyPool,headPool,zoneFillMesh,zoneBorderMesh,_zoneCacheR:null};
 }
 
 function build3DBiome(biomeId){
@@ -1849,6 +1874,22 @@ function render3DFrame(now,dt){
     camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
     renderer.setSize(innerWidth,innerHeight);
   }
+
+  // Outside-zone red tint + pulsing border, mirroring the 2D canvas's zone
+  // warning (which never shows in 3D since #gc stays hidden there).
+  if(st._zoneCacheR!==zoneRadius){
+    st._zoneCacheR=zoneRadius;
+    const outerR=Math.max(WW,WH)*2.2;
+    st.zoneFillMesh.geometry.dispose();
+    st.zoneFillMesh.geometry=new THREE.RingGeometry(zoneRadius,outerR,64);
+    st.zoneBorderMesh.geometry.dispose();
+    st.zoneBorderMesh.geometry=new THREE.RingGeometry(Math.max(1,zoneRadius-5),zoneRadius+5,64);
+  }
+  st.zoneFillMesh.position.set(zoneCenterX-st.offX,2,zoneCenterY-st.offY);
+  st.zoneBorderMesh.position.set(zoneCenterX-st.offX,2.5,zoneCenterY-st.offY);
+  st.zoneFillMesh.visible=true;
+  st.zoneBorderMesh.visible=true;
+  st.zoneBorderMesh.material.opacity=0.5+Math.sin(now*.003)*.25;
 
   // NYC-only decoration: taxis cruise their street forever, wrapping at the
   // world edge.
