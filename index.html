@@ -1033,7 +1033,14 @@ function make3DActorMeshes(THREE,scene){
   // ribbon lying on the ground reads as a flat paper cutout from the chase
   // camera's angle; raising the center vertex gives it a real rounded
   // cross-section, recomputed normals so it actually shades like a tube.
-  const BODY_POOL=16, MAX_PTS=40, bodyPool=[];
+  // MAX_PTS caps how much of a snake's length actually renders — it used
+  // to be 40, a leftover from when each segment was its own draw call and
+  // needed capping for performance. Now the whole body is one ribbon mesh
+  // per snake (more points just means a bigger vertex buffer, not more
+  // draw calls), so capping this low meant the visible body stopped
+  // growing well before the snake's real length did — "the snake isn't
+  // growing" once past ~40 segments, even though segs.length kept climbing.
+  const BODY_POOL=16, MAX_PTS=180, bodyPool=[];
   const bodyIndices=[];
   for(let p=0;p<MAX_PTS-1;p++){
     const l0=p*3,c0=p*3+1,r0=p*3+2, l1=(p+1)*3,c1=(p+1)*3+1,r1=(p+1)*3+2;
@@ -1991,7 +1998,7 @@ function render3DFrame(now,dt){
   for(const s of allSnakes){
     if(bi>=st.bodyPool.length)break;
     const mesh=st.bodyPool[bi++];
-    const n=Math.min(s.segs.length,40);
+    const n=Math.min(s.segs.length,180);
     if(n<2){mesh.visible=false;continue;}
     const rad=s.rad;
     const posAttr=mesh.geometry.attributes.position;
@@ -3244,8 +3251,10 @@ class Snake{
     this.vx*=this.fr;this.vy*=this.fr;
 
     this.segs.unshift(nh);
-    // Chain following
-    const maxE=Math.min(this.segs.length,70);
+    // Chain following — matches the 3D ribbon's render cap (180) so the
+    // whole visible body actually gets spacing-corrected, not just the
+    // first 70 segments.
+    const maxE=Math.min(this.segs.length,180);
     for(let si=1;si<maxE;si++){
       const prev=this.segs[si-1],curr=this.segs[si];
       const ddx=curr.x-prev.x,ddy=curr.y-prev.y;
