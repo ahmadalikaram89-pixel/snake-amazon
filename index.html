@@ -4056,6 +4056,7 @@ function loop(ts){
       // turn RATE and integrate it into the heading directly, scaled by
       // real elapsed time and how far the stick is actually pushed, so a
       // light nudge barely turns and centering the stick stops turning.
+      let targetRate=0;
       if(joystickActive&&joystickMag>0.05){
         let rel=joystickAngle+Math.PI/2;
         rel=Math.atan2(Math.sin(rel),Math.cos(rel));
@@ -4066,8 +4067,20 @@ function loop(ts){
         // on itself.
         const norm=Math.max(-1,Math.min(1,rel/(Math.PI/2)));
         const maxTurnRate=6.5;
-        player.angle+=norm*maxTurnRate*joystickMag*(dt/1000);
+        targetRate=norm*maxTurnRate*joystickMag;
       }
+      // Ease the actual turn rate toward the target rather than snapping
+      // the heading directly by it every frame — AI snakes always turn via
+      // a smooth this.angle+=da*0.055 convergence, so an instant, unequal
+      // rate change made the player feel stiff/robotic next to them, and
+      // made the trailing body bend at sharp, jerky angles frame to frame
+      // instead of a soft curve. This still can't spin away on its own:
+      // targetRate is always bounded by joystickMag, and it's the rate
+      // being eased, not an absolute angle re-derived from itself.
+      player._turnRate=player._turnRate||0;
+      const turnEase=Math.min(1,10*(dt/1000));
+      player._turnRate+=(targetRate-player._turnRate)*turnEase;
+      player.angle+=player._turnRate*(dt/1000);
       player.ta=player.angle;
     }else if(inputAngle!==null){
       player.ta=inputAngle;
