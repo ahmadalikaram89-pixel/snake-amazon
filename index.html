@@ -215,7 +215,6 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--dark);color:va
 #sg{display:none;position:fixed;inset:0}
 #sg.active{display:block;opacity:1}
 #gc{position:absolute;inset:0;width:100%;height:100%}
-#gc3d{position:absolute;inset:0;width:100%;height:100%;display:none}
 
 /* ── HUD — PUBG Style ── */
 /* Top bar: Alive + Zone + Score merged into one translucent bar instead of three boxes */
@@ -424,25 +423,13 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--dark);color:va
   .menu-left{padding:0 0 50px 20px;width:100%}
   .menu-right{width:50%;opacity:.4}
   /* Ability bar bottom-left; HP/level box swaps to bottom-right in its place, so neither overlaps the other or the joystick */
-  .abb{left:14px;right:auto;bottom:70px;transform:none}
+  .abb{left:14px;right:auto;bottom:135px;transform:none}
   .hp-hud{left:auto;right:10px;bottom:250px}
   .abs{width:52px;height:52px}.abs-k,.abs-n{display:none}
   #mm{width:100px;height:100px}
   /* Movement joystick stays bottom-right, below the HP box */
-  #touchCtrl{display:block;left:auto;right:10px;bottom:45px}
+  #touchCtrl{display:block;left:auto;right:10px;bottom:110px}
   .go-stats-grid{grid-template-columns:repeat(2,1fr)}
-}
-/* Landscape phones: viewport is short and wide, so the bottom-left HP card and
-   the joystick (both anchored with tall pixel offsets meant for portrait/desktop)
-   land on top of each other and the ability bar floats mid-screen instead of
-   hugging the bottom edge. Reflow for short heights instead. */
-@media(max-height:500px) and (orientation:landscape){
-  .abb{bottom:6px}
-  .abs{width:46px;height:46px}.abs-k,.abs-n{display:none}
-  .hp-hud{bottom:auto;top:70px;left:14px;padding:8px 12px;min-width:150px}
-  #touchCtrl{display:block;bottom:8px;left:14px}
-  .joy-outer{width:88px;height:88px}
-  .joy-inner{width:36px;height:36px}
 }
 </style>
 <link rel="manifest" href="data:application/json,{&quot;name&quot;:&quot;Snake Amazon&quot;,&quot;short_name&quot;:&quot;SnakeAMZ&quot;,&quot;display&quot;:&quot;fullscreen&quot;,&quot;orientation&quot;:&quot;portrait&quot;,&quot;background_color&quot;:&quot;%230a0c0e&quot;,&quot;theme_color&quot;:&quot;%230a0c0e&quot;,&quot;icons&quot;:[{&quot;src&quot;:&quot;assets/icon-192.png&quot;,&quot;sizes&quot;:&quot;192x192&quot;,&quot;type&quot;:&quot;image/png&quot;},{&quot;src&quot;:&quot;assets/icon-512.png&quot;,&quot;sizes&quot;:&quot;512x512&quot;,&quot;type&quot;:&quot;image/png&quot;}]}"/>
@@ -621,7 +608,6 @@ html,body{position:fixed;width:100%;height:100%;overflow:hidden}
 <!-- ═══════════════ GAME ═══════════════ -->
 <div id="sg" class="screen">
   <canvas id="gc"></canvas>
-  <canvas id="gc3d"></canvas>
 
   <!-- HUD Top -->
 <!-- Pause overlay -->
@@ -785,7 +771,7 @@ const WW=3200,WH=3200;
 const SEG_DIST=8;
 const BASE_SPEED=3.2;
 let TOTAL_PLAYERS=8; // scales up with account level, see getDifficultyT()
-const PREY_COUNT=180;
+const PREY_COUNT=60;
 // 0..1, ramps up with account (meta) level so returning players face a harder game
 let AI_DIFF=0;
 function getDifficultyT(){return Math.min(1,((stats.level||1)-1)/29);}
@@ -889,1247 +875,32 @@ const BIOMES=[
      {e:'⭐',n:'Star',p:30,r:9,s:2.0,c:'#ffee44'},
      {e:'🪐',n:'Meteor',p:60,r:14,s:.6,c:'#aa88ff'},
    ]},
-  {id:'snow',     name:'❄️ FROZEN TUNDRA',  bgTop:'#0a1420',bgBot:'#050a10',
-   fogCol:'rgba(10,18,28,', fogStr:.5, acCol:'#66ccff',
-   groundCols:['#c8dce8','#a8c4d8','#d8e8f0','#98b4c8','#b8d0e0'],
-   pray:[
-     {e:'🐇',n:'Snow Hare',p:20,r:9,s:1.5,c:'#e8f0f8'},
-     {e:'🦊',n:'Arctic Fox',p:30,r:10,s:1.6,c:'#f0f0f0'},
-     {e:'🐧',n:'Penguin',p:25,r:9,s:.9,c:'#222233'},
-     {e:'🦣',n:'Mammoth Calf',p:55,r:15,s:.5,c:'#7a5a3a'},
-   ]},
-  {id:'cave',     name:'🕳️ CRYSTAL CAVERNS',bgTop:'#0c0a14',bgBot:'#05040a',
-   fogCol:'rgba(10,8,18,', fogStr:.75, acCol:'#aa66ff',
-   groundCols:['#2a2438','#221c30','#332c44','#1c1828','#3a3050'],
-   pray:[
-     {e:'🦇',n:'Bat',p:18,r:8,s:2.0,c:'#4a3a5a'},
-     {e:'🕷️',n:'Cave Spider',p:22,r:8,s:1.3,c:'#2a2030'},
-     {e:'💎',n:'Crystal Bug',p:35,r:9,s:1.0,c:'#88ccff'},
-     {e:'🐛',n:'Glowworm',p:15,r:7,s:.6,c:'#aaff66'},
-   ]},
-  // NYC (and jungle) render in real 3D (WebGL) instead of the 2D canvas —
-  // see the "3D BIOME SYSTEM" section below. bgTop/groundCols etc. are
-  // unused for it (kept only so this entry has the same shape as every
-  // other biome).
-  {id:'nyc',      name:'🗽 NEW YORK CITY',   bgTop:'#0d1730',bgBot:'#05040a',
-   fogCol:'rgba(13,23,48,', fogStr:.5, acCol:'#ffd67a',
-   groundCols:['#24262c','#2a2c32','#1e2024','#302f34','#26282e'],
-   pray:[
-     {e:'🐦',n:'Pigeon',p:15,r:7,s:1.6,c:'#8a8a90'},
-     {e:'🐀',n:'Rat',p:12,r:7,s:1.8,c:'#5a5248'},
-     {e:'🌭',n:'Hot Dog Cart',p:35,r:10,s:0,c:'#cc4422'},
-     {e:'🚕',n:'Taxi',p:40,r:11,s:1.2,c:'#ffcc22'},
-   ]},
 ];
 
 // Current biome
 let currentBiome=BIOMES[0];
-// Biome visit order for the current match. Jungle (0) always opens the match;
-// the other 4 phases are filled by drawing 4 of the remaining biomes at random
-// each game, so repeat playthroughs don't always see the same biomes in the
-// same order, and the pool can keep growing without lengthening a match.
+// Biome visit order for the current match. Jungle (0) always opens the match,
+// but the remaining 4 biomes are shuffled each game so repeat playthroughs
+// don't always see the exact same jungle->ocean->desert->volcano->space order.
 let biomeOrder=[0,1,2,3,4];
 function shuffleBiomeOrder(){
-  const rest=[1,2,3,4,5,6,7];
+  const rest=[1,2,3,4];
   for(let i=rest.length-1;i>0;i--){
     const j=Math.floor(Math.random()*(i+1));
     [rest[i],rest[j]]=[rest[j],rest[i]];
   }
-  biomeOrder=[0,...rest.slice(0,4)];
-}
-
-// ═══════════════════════════════════════════
-// 3D BIOME SYSTEM — real WebGL environments driven by the actual game state
-// (player/AI snake positions, prey, world bounds), not a separate demo.
-// Every 3D-capable biome shares one renderer/camera (bound to #gc3d) but gets
-// its own cached Scene + obstacle list + instanced meshes, built lazily the
-// first time a match enters it. Biomes not in THREED_BIOMES keep using the
-// original 2D canvas path untouched.
-// ═══════════════════════════════════════════
-const THREED_BIOMES=new Set(['nyc','jungle','ocean','desert','space','snow']);
-let TD=null;            // shared: {THREE,BufferGeometryUtils,renderer,camera,lastW,lastH}
-let tdLoadPromise=null;
-let NYC=null;            // {scene,offX,offY,obstacles,bodyPool,preyPool,taxis,camInit}
-let JUNGLE=null;         // {scene,offX,offY,obstacles,bodyPool,preyPool,camInit}
-let OCEAN=null;          // {scene,offX,offY,obstacles,bodyPool,preyPool,fish,camInit}
-let DESERT=null;         // {scene,offX,offY,obstacles,bodyPool,preyPool,tumbleweeds,camInit}
-let SPACE=null;          // {scene,offX,offY,obstacles,bodyPool,preyPool,debris,camInit}
-let SNOW=null;           // {scene,offX,offY,obstacles,bodyPool,preyPool,snowballs,camInit}
-
-function ensure3D(){
-  if(TD)return Promise.resolve(TD);
-  if(tdLoadPromise)return tdLoadPromise;
-  tdLoadPromise=import('./assets/three-bundle.min.js').then(mod=>{
-    const THREE=mod.THREE;
-    const canvas3d=document.getElementById('gc3d');
-    const renderer=new THREE.WebGLRenderer({canvas:canvas3d,antialias:true});
-    renderer.setPixelRatio(Math.min(devicePixelRatio,2));
-    renderer.setSize(innerWidth,innerHeight);
-    const camera=new THREE.PerspectiveCamera(60,innerWidth/innerHeight,1,4000);
-    TD={THREE,BufferGeometryUtils:mod.BufferGeometryUtils,renderer,camera,lastW:innerWidth,lastH:innerHeight};
-    return TD;
-  });
-  return tdLoadPromise;
-}
-
-// Creates the instanced meshes every 3D biome uses to draw snakes/prey from
-// their real live positions (one draw call each instead of one per segment).
-// Prey emoji -> canvas texture, cached once and reused by every prey sprite
-// across every 3D biome (a handful of distinct emoji total, regardless of
-// how many prey are on screen).
-const _emojiTexCache={};
-function getEmojiTexture(THREE,emoji){
-  let tex=_emojiTexCache[emoji];
-  if(tex)return tex;
-  const c=document.createElement('canvas');c.width=64;c.height=64;
-  const g=c.getContext('2d');
-  g.font='46px serif';g.textAlign='center';g.textBaseline='middle';
-  g.fillText(emoji,32,34);
-  tex=new THREE.CanvasTexture(c);
-  _emojiTexCache[emoji]=tex;
-  return tex;
-}
-
-// A repeating reptile scale pattern tiled both across the body's width and
-// along its length — small overlapping scallop shapes in a brick-offset
-// grid, like the logo's snake — instead of a flat solid strip. White base
-// so material.color still tints it per-snake/per-evolution-tier.
-let _bodyRingTex=null;
-function getBodyRingTexture(THREE){
-  if(_bodyRingTex)return _bodyRingTex;
-  const c=document.createElement('canvas');c.width=48;c.height=48;
-  const g=c.getContext('2d');
-  g.fillStyle='#ffffff';g.fillRect(0,0,48,48);
-  g.fillStyle='rgba(0,0,0,0.22)';
-  g.strokeStyle='rgba(0,0,0,0.5)';
-  g.lineWidth=1.6;
-  const rows=3, sw=24, sh=16;
-  for(let row=-1;row<=rows;row++){
-    const offsetX=(row%2===0)?0:sw/2;
-    for(let col=-1;col<=2;col++){
-      const cx=col*sw+offsetX, cy=row*sh+sh/2;
-      g.beginPath();
-      g.arc(cx,cy,sw*0.55,0.12*Math.PI,0.88*Math.PI);
-      g.fill();g.stroke();
-    }
-  }
-  const tex=new THREE.CanvasTexture(c);
-  tex.wrapS=THREE.RepeatWrapping;
-  tex.wrapT=THREE.RepeatWrapping;
-  tex.repeat.set(2,1);
-  return _bodyRingTex=tex;
-}
-
-function make3DActorMeshes(THREE,scene){
-  // Snake bodies render as one continuous ribbon mesh per snake — a real
-  // triangle strip following the live segment positions — instead of a
-  // chain of separate beads/dots. This recreates the classic top-down 2D
-  // snake's smooth curved silhouette. It's also a plain (non-instanced)
-  // Mesh per snake, same proven-reliable rendering path as the head below;
-  // an InstancedMesh body used earlier silently failed to render on some
-  // real mobile GPUs/WebGL drivers even though the environment and head
-  // drew fine ("the snake's body disappears").
-  // 3 vertices per point (left/center/right) instead of 2 — a flat 2-vert
-  // ribbon lying on the ground reads as a flat paper cutout from the chase
-  // camera's angle; raising the center vertex gives it a real rounded
-  // cross-section, recomputed normals so it actually shades like a tube.
-  const BODY_POOL=16, MAX_PTS=40, bodyPool=[];
-  const bodyIndices=[];
-  for(let p=0;p<MAX_PTS-1;p++){
-    const l0=p*3,c0=p*3+1,r0=p*3+2, l1=(p+1)*3,c1=(p+1)*3+1,r1=(p+1)*3+2;
-    bodyIndices.push(l0,c0,l1, l1,c0,c1, c0,r0,c1, c1,r0,r1);
-  }
-  const bodyRingTex=getBodyRingTexture(THREE);
-  for(let i=0;i<BODY_POOL;i++){
-    const geo=new THREE.BufferGeometry();
-    const positions=new Float32Array(MAX_PTS*3*3);
-    geo.setAttribute('position',new THREE.BufferAttribute(positions,3).setUsage(THREE.DynamicDrawUsage));
-    const uvs=new Float32Array(MAX_PTS*3*2);
-    geo.setAttribute('uv',new THREE.BufferAttribute(uvs,2).setUsage(THREE.DynamicDrawUsage));
-    const normals=new Float32Array(MAX_PTS*3*3);
-    geo.setAttribute('normal',new THREE.BufferAttribute(normals,3).setUsage(THREE.DynamicDrawUsage));
-    geo.setIndex(bodyIndices);
-    geo.setDrawRange(0,0);
-    const mat=new THREE.MeshStandardMaterial({roughness:0.4,side:THREE.DoubleSide,map:bodyRingTex});
-    const mesh=new THREE.Mesh(geo,mat);
-    mesh.visible=false;
-    mesh.frustumCulled=false;
-    scene.add(mesh);
-    bodyPool.push(mesh);
-  }
-
-  // Prey render as billboarded emoji sprites (always face the camera) instead
-  // of plain colored balls — the actual rabbit/fish/taxi/etc. icon shows up
-  // clearly instead of an undifferentiated blob, matching the 2D biomes'
-  // look. A pool sized above PREY_COUNT, reused/repositioned every frame.
-  const MAX_PREY=240, preyPool=[];
-  for(let i=0;i<MAX_PREY;i++){
-    const mat=new THREE.SpriteMaterial({transparent:true});
-    const sprite=new THREE.Sprite(mat);
-    sprite.visible=false;
-    scene.add(sprite);
-    preyPool.push(sprite);
-  }
-
-  // A pool of real head meshes (flattened/elongated + two eyes) on top of the
-  // instanced body — a uniform chain of spheres reads as a worm, not a
-  // snake, and doesn't show which way it's facing. Snake counts are small
-  // (<=~12) so individual (non-instanced) meshes here are cheap.
-  const HEAD_POOL=16, headPool=[];
-  for(let i=0;i<HEAD_POOL;i++){
-    const g=new THREE.Group();
-    const headMat=new THREE.MeshStandardMaterial({roughness:0.4});
-    const head=new THREE.Mesh(new THREE.SphereGeometry(1,12,10),headMat);
-    head.scale.set(1,0.82,1.35);
-    g.add(head);
-    const eyeMat=new THREE.MeshStandardMaterial({color:0x0a0a0a,roughness:0.3});
-    const eyeGeo=new THREE.SphereGeometry(1,6,6);
-    const eyeL=new THREE.Mesh(eyeGeo,eyeMat);eyeL.scale.set(.22,.22,.22);eyeL.position.set(.55,.45,.9);
-    const eyeR=eyeL.clone();eyeR.position.x=-.5;
-    g.add(eyeL,eyeR);
-    g.visible=false;
-    scene.add(g);
-    headPool.push({group:g,mat:headMat});
-  }
-  return {bodyPool,preyPool,headPool};
-}
-
-function build3DBiome(biomeId){
-  if(biomeId==='nyc')buildNYCCityOnce();
-  else if(biomeId==='jungle')buildJungleWorldOnce();
-  else if(biomeId==='ocean')buildOceanWorldOnce();
-  else if(biomeId==='desert')buildDesertWorldOnce();
-  else if(biomeId==='space')buildSpaceWorldOnce();
-  else if(biomeId==='snow')buildSnowWorldOnce();
-}
-function get3D(biomeId){
-  if(biomeId==='nyc')return NYC;
-  if(biomeId==='jungle')return JUNGLE;
-  if(biomeId==='ocean')return OCEAN;
-  if(biomeId==='desert')return DESERT;
-  if(biomeId==='space')return SPACE;
-  if(biomeId==='snow')return SNOW;
-  return null;
-}
-
-// Builds the city once (world coords, matching WW x WH exactly) and caches it
-// — the layout doesn't need to regenerate on repeat visits within a session.
-function buildNYCCityOnce(){
-  if(NYC)return;
-  const {THREE,BufferGeometryUtils}=TD;
-  const scene=new THREE.Scene();
-  scene.background=new THREE.Color(0x0d1730);
-  scene.fog=new THREE.FogExp2(0x0d1730,0.0035);
-  scene.add(new THREE.HemisphereLight(0x4a70a8,0x181410,2.1));
-  scene.add(new THREE.AmbientLight(0x3a5075,2.0));
-  const moon=new THREE.DirectionalLight(0x9fc0ff,1.6);
-  moon.position.set(-400,600,-300);
-  scene.add(moon);
-
-  NYC={scene,offX:WW/2,offY:WH/2,obstacles:[],taxis:[],camInit:false};
-
-  // Streets are wide and buildings occupy less than their full cell — unlike
-  // a car bound to lanes, this snake can approach from any angle, so the gaps
-  // between buildings need to be generous, not just the rendered street strip.
-  const BLOCK=200,STREET_W=40,GRID_N=Math.round(WW/BLOCK); // 16 blocks covers WW=3200 exactly
-
-  const groundGeo=new THREE.PlaneGeometry(WW,WH);
-  const ground=new THREE.Mesh(groundGeo,new THREE.MeshStandardMaterial({color:0x24262c,roughness:1}));
-  ground.rotation.x=-Math.PI/2;
-  scene.add(ground);
-
-  function laneTexture(){
-    const c=document.createElement('canvas');c.width=64;c.height=64;
-    const g=c.getContext('2d');
-    g.fillStyle='#2a2c32';g.fillRect(0,0,64,64);
-    g.fillStyle='#d8c860';g.fillRect(28,4,8,24);g.fillRect(28,36,8,24);
-    const tex=new THREE.CanvasTexture(c);tex.wrapS=tex.wrapT=THREE.RepeatWrapping;
-    tex.repeat.set(1,WH/64);
-    return tex;
-  }
-  const half=WW/2;
-  const hGeos=[],vGeos=[];
-  for(let i=0;i<=GRID_N;i++){
-    const pos=-half+i*BLOCK;
-    const hGeo=new THREE.PlaneGeometry(STREET_W,WH);
-    hGeo.rotateX(-Math.PI/2);hGeo.rotateY(Math.PI/2);hGeo.translate(pos,0.02,0);
-    hGeos.push(hGeo);
-    const vGeo=new THREE.PlaneGeometry(STREET_W,WW);
-    vGeo.rotateX(-Math.PI/2);vGeo.translate(0,0.03,pos);
-    vGeos.push(vGeo);
-  }
-  const streetMat=new THREE.MeshStandardMaterial({map:laneTexture(),roughness:1});
-  scene.add(new THREE.Mesh(BufferGeometryUtils.mergeGeometries(hGeos),streetMat));
-  scene.add(new THREE.Mesh(BufferGeometryUtils.mergeGeometries(vGeos),streetMat));
-
-  // Shared pool of window-lit facade textures — a unique canvas per building
-  // (~200+ of them) was the biggest startup cost, so bake a small pool once
-  // and reuse it (buildings still look varied since size/height/color differ).
-  const TEX_POOL_SIZE=10;
-  function buildingTextures(seed){
-    const base=['#2b2f3a','#33303a','#2a3038','#302b34'][seed%4];
-    const fc=document.createElement('canvas');fc.width=64;fc.height=128;
-    const fg=fc.getContext('2d');fg.fillStyle=base;fg.fillRect(0,0,64,128);
-    const ec=document.createElement('canvas');ec.width=64;ec.height=128;
-    const eg=ec.getContext('2d');eg.fillStyle='#000000';eg.fillRect(0,0,64,128);
-    for(let y=6;y<128;y+=10){
-      for(let x=4;x<64;x+=10){
-        const lit=Math.random()<0.45;
-        fg.fillStyle=lit?'#8a7a50':'#1a1c22';fg.fillRect(x,y,5,6);
-        if(lit){eg.fillStyle='#ffd67a';eg.fillRect(x,y,5,6);}
-      }
-    }
-    const facadeTex=new THREE.CanvasTexture(fc),emissiveTex=new THREE.CanvasTexture(ec);
-    facadeTex.wrapS=facadeTex.wrapT=THREE.RepeatWrapping;
-    emissiveTex.wrapS=emissiveTex.wrapT=THREE.RepeatWrapping;
-    return {facadeTex,emissiveTex};
-  }
-  const texPool=[];
-  for(let i=0;i<TEX_POOL_SIZE;i++)texPool.push(buildingTextures(i));
-  const buildingColors=[0x555a66,0x4a4e58,0x5c5248,0x3f4a52,0x50464e];
-
-  const buildingRoot=new THREE.Group();
-  scene.add(buildingRoot);
-  let seedCounter=0;
-  for(let bx=0;bx<GRID_N;bx++){
-    for(let bz=0;bz<GRID_N;bz++){
-      if(Math.random()<0.12)continue; // occasional plaza gap
-      const cx=bx*BLOCK+BLOCK/2, cz=bz*BLOCK+BLOCK/2; // game-world coords (0..WW)
-      const footprint=BLOCK-STREET_W-2;
-      const w=footprint*(0.4+Math.random()*0.25), d=footprint*(0.4+Math.random()*0.25);
-      const distFromCenter=Math.hypot(bx-GRID_N/2,bz-GRID_N/2);
-      const h=Math.max(6,(GRID_N/2-distFromCenter*0.6))*8*(0.6+Math.random()*0.9);
-      const seed=seedCounter++;
-      const {facadeTex,emissiveTex}=texPool[seed%TEX_POOL_SIZE];
-      const fTex=facadeTex.clone(),eTex=emissiveTex.clone();
-      fTex.repeat.set(Math.max(1,Math.round(w/6)),Math.max(1,Math.round(h/8)));
-      eTex.repeat.set(fTex.repeat.x,fTex.repeat.y);
-      fTex.needsUpdate=eTex.needsUpdate=true;
-      const mat=new THREE.MeshStandardMaterial({
-        map:fTex,color:buildingColors[seed%buildingColors.length],
-        emissiveMap:eTex,emissive:0xffffff,emissiveIntensity:1.4,
-        roughness:0.85,metalness:0.05,
-      });
-      const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);
-      const px=cx+(Math.random()-0.5)*1.5, pz=cz+(Math.random()-0.5)*1.5;
-      mesh.position.set(px-NYC.offX,h/2,pz-NYC.offY);
-      buildingRoot.add(mesh);
-      // Stepped setback tiers (like real NYC towers) instead of a plain box —
-      // a flat cube reads as a placeholder, a tapering silhouette reads as
-      // a building. ~60% get one tier, half of those get a second, smaller
-      // one; the tallest also get a thin spire.
-      let topY=h/2, topW=w, topD=d;
-      const roofMat=new THREE.MeshStandardMaterial({color:0x3a3d44,roughness:0.9});
-      if(Math.random()<0.6){
-        const t1w=topW*(0.55+Math.random()*0.2), t1d=topD*(0.55+Math.random()*0.2), t1h=h*(0.15+Math.random()*0.2);
-        const tier1=new THREE.Mesh(new THREE.BoxGeometry(t1w,t1h,t1d),mat);
-        tier1.position.y=topY+t1h/2;
-        mesh.add(tier1);
-        topY+=t1h; topW=t1w; topD=t1d;
-        if(Math.random()<0.5){
-          const t2w=topW*(0.5+Math.random()*0.2), t2d=topD*(0.5+Math.random()*0.2), t2h=h*(0.1+Math.random()*0.15);
-          const tier2=new THREE.Mesh(new THREE.BoxGeometry(t2w,t2h,t2d),roofMat);
-          tier2.position.y=topY+t2h/2;
-          mesh.add(tier2);
-          topY+=t2h; topW=t2w; topD=t2d;
-        }
-      }else{
-        const rh=h*(0.06+Math.random()*0.1);
-        const roof=new THREE.Mesh(new THREE.BoxGeometry(topW*0.9,rh,topD*0.9),roofMat);
-        roof.position.y=topY+rh/2;
-        mesh.add(roof);
-        topY+=rh;
-      }
-      if(h>65&&Math.random()<0.5){
-        const spireH=h*(0.15+Math.random()*0.2);
-        const spire=new THREE.Mesh(new THREE.CylinderGeometry(1,1.6,1,6),new THREE.MeshStandardMaterial({color:0x22262c,roughness:0.6}));
-        spire.scale.set(2,spireH,2);
-        spire.position.y=topY+spireH/2;
-        mesh.add(spire);
-      }
-      // Collision footprint in GAME-WORLD coords for gameplay (see resolve3DCollision)
-      NYC.obstacles.push({shape:'rect',x:px,y:pz,hw:w/2+3,hd:d/2+3});
-    }
-  }
-
-  // Cosmetic taxis — decorative only, not part of collision.
-  function makeTaxi(){
-    const g=new THREE.Group();
-    const body=new THREE.Mesh(new THREE.BoxGeometry(26,11,15),new THREE.MeshStandardMaterial({color:0xffcc22,roughness:0.4,metalness:0.3}));
-    body.position.y=7.5;
-    const cabin=new THREE.Mesh(new THREE.BoxGeometry(14,6,14),new THREE.MeshStandardMaterial({color:0x111318,roughness:0.3}));
-    cabin.position.set(-1,13.5,0);
-    g.add(body,cabin);
-    return g;
-  }
-  for(let i=0;i<10;i++){
-    const t=makeTaxi();
-    const lane=(Math.floor(Math.random()*(GRID_N+1)))*BLOCK-half;
-    const horizontal=Math.random()<0.5;
-    t.userData={horizontal,speed:80+Math.random()*60,dir:Math.random()<0.5?1:-1};
-    if(horizontal){t.position.set(-half,0,lane);t.rotation.y=Math.PI/2;}
-    else{t.position.set(lane,0,-half);}
-    scene.add(t);
-    NYC.taxis.push(t);
-  }
-
-  Object.assign(NYC,make3DActorMeshes(THREE,scene));
-}
-
-// Builds the jungle once, same idea as the city: real world bounds, cached
-// after first visit. Trees are solid (circular) obstacles; the ground reuses
-// the same grass-tuft palette as the 2D jungle biome for visual continuity.
-function buildJungleWorldOnce(){
-  if(JUNGLE)return;
-  const {THREE}=TD;
-  const scene=new THREE.Scene();
-  scene.background=new THREE.Color(0x142c10);
-  scene.fog=new THREE.FogExp2(0x142c10,0.0018);
-  scene.add(new THREE.HemisphereLight(0x9ad078,0x3e5a28,4.0));
-  scene.add(new THREE.AmbientLight(0x4a7838,3.2));
-  const sun=new THREE.DirectionalLight(0xe8ffd0,2.6);
-  sun.position.set(350,600,200);
-  scene.add(sun);
-
-  JUNGLE={scene,offX:WW/2,offY:WH/2,obstacles:[],camInit:false};
-
-  function grassTexture(){
-    const c=document.createElement('canvas');c.width=128;c.height=128;
-    const g=c.getContext('2d');
-    g.fillStyle='#1a3a0a';g.fillRect(0,0,128,128);
-    const patches=['#1e4410','#243d0c','#0e2206','#2a4a10'];
-    for(let i=0;i<220;i++){
-      const x=Math.random()*128,y=Math.random()*128,r=1.5+Math.random()*7;
-      g.fillStyle=patches[i%patches.length];g.globalAlpha=0.35+Math.random()*0.3;
-      g.beginPath();g.arc(x,y,r,0,Math.PI*2);g.fill();
-    }
-    g.globalAlpha=1;
-    for(let i=0;i<260;i++){
-      const x=Math.random()*128,y=Math.random()*128,h=3+Math.random()*8;
-      g.strokeStyle=['#1a5a10','#228a14','#2aaa18'][i%3];
-      g.globalAlpha=0.5+Math.random()*0.35;g.lineWidth=1;
-      g.beginPath();g.moveTo(x,y);g.lineTo(x+Math.random()*2-1,y-h);g.stroke();
-    }
-    g.globalAlpha=1;
-    const tex=new THREE.CanvasTexture(c);
-    tex.wrapS=tex.wrapT=THREE.RepeatWrapping;tex.repeat.set(WW/128,WH/128);
-    return tex;
-  }
-  const ground=new THREE.Mesh(new THREE.PlaneGeometry(WW,WH),new THREE.MeshStandardMaterial({map:grassTexture(),roughness:1}));
-  ground.rotation.x=-Math.PI/2;
-  scene.add(ground);
-
-  // Rivers: decorative winding ribbons (matches the 2D biome's rivers), not
-  // solid — a snake can cross water same as it always could.
-  for(let r=0;r<3;r++){
-    const pts=[];
-    let rx=rnd(200,WW-200),ry=r===0?100:r===1?WH-100:rnd(200,WH-200);
-    let dir=r===0?Math.PI/2:r===1?-Math.PI/2:rnd(0,Math.PI*2);
-    for(let s=0;s<14;s++){
-      pts.push(new THREE.Vector3(rx-JUNGLE.offX,0.05,ry-JUNGLE.offY));
-      dir+=rnd(-.5,.5);
-      rx=cl(rx+Math.cos(dir)*rnd(180,300),100,WW-100);
-      ry=cl(ry+Math.sin(dir)*rnd(180,300),100,WH-100);
-    }
-    const curve=new THREE.CatmullRomCurve3(pts);
-    const riverGeo=new THREE.TubeGeometry(curve,80,rnd(35,55),6,false);
-    const riverMat=new THREE.MeshStandardMaterial({color:0x2a6ab0,roughness:0.35,metalness:0.1,transparent:true,opacity:0.85});
-    const river=new THREE.Mesh(riverGeo,riverMat);
-    river.scale.y=0.02; // flatten the tube into a ribbon on the ground
-    scene.add(river);
-  }
-
-  // Palm trees: solid circular obstacles — a slightly leaning tapered trunk
-  // with a fan of drooping fronds at the top, instead of a generic
-  // trunk-and-round-canopy tree.
-  //
-  // The trunk mesh is scaled non-uniformly (thin in X/Z, tall in Y). Fronds
-  // used to be children of that trunk mesh — a rotated child inside a
-  // non-uniformly-scaled parent gets sheared/stretched by the parent's
-  // scale in world space, which turned each frond into a huge distorted
-  // wedge instead of a small plank (the "giant dark triangle filling the
-  // screen" bug reported from a real device). Give the crown its own
-  // unscaled group instead, positioned at the trunk's actual top, and hang
-  // the trunk mesh and the fronds off that as siblings.
-  const trunkGeo=new THREE.CylinderGeometry(0.6,1,1,8);
-  const frondGeo=new THREE.BoxGeometry(1,0.08,1);
-  const frondColors=[0x2f8a2a,0x358a34,0x2a7a28,0x3a9838];
-  const treeRoot=new THREE.Group();
-  scene.add(treeRoot);
-  const NUM_TREES=150;
-  for(let i=0;i<NUM_TREES;i++){
-    const tx=rnd(120,WW-120), tz=rnd(120,WH-120);
-    const trunkH=rnd(46,78), trunkR=rnd(3.5,5.5);
-    const lean=rnd(-0.12,0.12), lean2=rnd(-0.12,0.12);
-
-    const palm=new THREE.Group();
-    palm.position.set(tx-JUNGLE.offX,0,tz-JUNGLE.offY);
-    palm.rotation.z=lean;palm.rotation.x=lean2;
-
-    const trunkMat=new THREE.MeshStandardMaterial({color:0x8a6a3a,roughness:0.9});
-    const trunk=new THREE.Mesh(trunkGeo,trunkMat);
-    trunk.scale.set(trunkR,trunkH,trunkR);
-    trunk.position.y=trunkH/2;
-    palm.add(trunk);
-
-    const crown=new THREE.Group();
-    crown.position.y=trunkH;
-    palm.add(crown);
-
-    const frondCount=ri(5,7);
-    const frondLen=rnd(26,40), frondW=frondLen*0.32;
-    const frondMat=new THREE.MeshStandardMaterial({color:frondColors[i%frondColors.length],roughness:0.85,side:THREE.DoubleSide});
-    for(let f=0;f<frondCount;f++){
-      const frond=new THREE.Mesh(frondGeo,frondMat);
-      frond.scale.set(frondW,1,frondLen);
-      // Fan out evenly around the crown, each drooping outward and down.
-      const fa=(f/frondCount)*Math.PI*2;
-      frond.rotation.y=fa;
-      frond.rotation.x=-Math.PI/2+0.55; // droop down from horizontal
-      frond.translateZ(frondLen*0.5);
-      crown.add(frond);
-    }
-    treeRoot.add(palm);
-    JUNGLE.obstacles.push({shape:'circle',x:tx,y:tz,radius:trunkR+7});
-  }
-
-  Object.assign(JUNGLE,make3DActorMeshes(THREE,scene));
-}
-
-// Builds the ocean floor once: heavy blue fog and dim cool lighting for an
-// underwater feel, coral clumps as solid circular obstacles (same role as
-// jungle trees / NYC buildings), decorative rock clusters, and small fish
-// schools cruising the seafloor (the ocean's answer to NYC's taxis).
-function buildOceanWorldOnce(){
-  if(OCEAN)return;
-  const {THREE}=TD;
-  const scene=new THREE.Scene();
-  scene.background=new THREE.Color(0x041c30);
-  scene.fog=new THREE.FogExp2(0x0a2c44,0.0026);
-  scene.add(new THREE.HemisphereLight(0x4aa0c8,0x0a2c3c,2.4));
-  scene.add(new THREE.AmbientLight(0x2a7090,2.1));
-  const sunshaft=new THREE.DirectionalLight(0x9fd8ff,1.3);
-  sunshaft.position.set(150,700,100);
-  scene.add(sunshaft);
-
-  OCEAN={scene,offX:WW/2,offY:WH/2,obstacles:[],fish:[],camInit:false};
-
-  function seafloorTexture(){
-    const c=document.createElement('canvas');c.width=128;c.height=128;
-    const g=c.getContext('2d');
-    g.fillStyle='#8a7a52';g.fillRect(0,0,128,128);
-    const patches=['#7a6a46','#93875e','#6e5f3e','#a0925f'];
-    for(let i=0;i<240;i++){
-      const x=Math.random()*128,y=Math.random()*128,r=1.5+Math.random()*8;
-      g.fillStyle=patches[i%patches.length];g.globalAlpha=0.3+Math.random()*0.3;
-      g.beginPath();g.arc(x,y,r,0,Math.PI*2);g.fill();
-    }
-    g.globalAlpha=1;
-    const tex=new THREE.CanvasTexture(c);
-    tex.wrapS=tex.wrapT=THREE.RepeatWrapping;tex.repeat.set(WW/128,WH/128);
-    return tex;
-  }
-  const ground=new THREE.Mesh(new THREE.PlaneGeometry(WW,WH),new THREE.MeshStandardMaterial({map:seafloorTexture(),roughness:1}));
-  ground.rotation.x=-Math.PI/2;
-  scene.add(ground);
-
-  // Coral clumps: solid circular obstacles, several tapered "branches" of
-  // reef color radiating from a base — a rounded blob alone would read as a
-  // rock, the branches read as coral.
-  const coralColors=[0xff6b5a,0xff9a3c,0xc84fd8,0xffd23c,0xff5c9e];
-  const branchGeo=new THREE.ConeGeometry(1,1,6);
-  const coralRoot=new THREE.Group();
-  scene.add(coralRoot);
-  const NUM_CORAL=130;
-  for(let i=0;i<NUM_CORAL;i++){
-    const cx=rnd(120,WW-120), cz=rnd(120,WH-120);
-    const baseR=rnd(14,26);
-    const clump=new THREE.Group();
-    clump.position.set(cx-OCEAN.offX,0,cz-OCEAN.offY);
-    const branchCount=ri(4,7);
-    const col=coralColors[i%coralColors.length];
-    for(let b=0;b<branchCount;b++){
-      const bh=rnd(18,38), br=rnd(3,6);
-      const mat=new THREE.MeshStandardMaterial({color:col,emissive:col,emissiveIntensity:0.35,roughness:0.7});
-      const branch=new THREE.Mesh(branchGeo,mat);
-      branch.scale.set(br,bh,br);
-      const ba=Math.random()*Math.PI*2, bd=Math.random()*baseR*0.6;
-      branch.position.set(Math.cos(ba)*bd,bh/2,Math.sin(ba)*bd);
-      branch.rotation.z=rnd(-0.3,0.3);branch.rotation.x=rnd(-0.3,0.3);
-      clump.add(branch);
-    }
-    coralRoot.add(clump);
-    OCEAN.obstacles.push({shape:'circle',x:cx,y:cz,radius:baseR+8});
-  }
-
-  // Rocks: decorative only, not part of collision.
-  const rockGeo=new THREE.IcosahedronGeometry(1,0);
-  for(let i=0;i<70;i++){
-    const rx=rnd(100,WW-100), rz=rnd(100,WH-100);
-    const rMat=new THREE.MeshStandardMaterial({color:0x555a52,roughness:0.95});
-    const rock=new THREE.Mesh(rockGeo,rMat);
-    const rr=rnd(8,20);
-    rock.scale.set(rr,rr*rnd(0.6,0.9),rr);
-    rock.rotation.set(Math.random()*Math.PI,Math.random()*Math.PI,Math.random()*Math.PI);
-    rock.position.set(rx-OCEAN.offX,rr*0.3,rz-OCEAN.offY);
-    scene.add(rock);
-  }
-
-  // Fish schools: small cruising decorations, same wrap-at-edge idea as NYC
-  // taxis but drifting in loose wandering paths instead of straight streets.
-  function makeFish(){
-    const g=new THREE.Group();
-    const body=new THREE.Mesh(new THREE.ConeGeometry(1,1,4),new THREE.MeshStandardMaterial({color:[0xffaa33,0x66ccff,0xff6688][ri(0,2)],roughness:0.4,metalness:0.2}));
-    body.scale.set(3,3,7);
-    body.rotation.x=Math.PI/2;
-    g.add(body);
-    return g;
-  }
-  for(let i=0;i<16;i++){
-    const f=makeFish();
-    const fx=rnd(150,WW-150), fz=rnd(150,WH-150);
-    f.position.set(fx-OCEAN.offX,rnd(15,45),fz-OCEAN.offY);
-    f.userData={angle:Math.random()*Math.PI*2,speed:20+Math.random()*30,turnT:Math.random()*Math.PI*2};
-    scene.add(f);
-    OCEAN.fish.push(f);
-  }
-
-  Object.assign(OCEAN,make3DActorMeshes(THREE,scene));
-}
-
-// Builds the desert once: bright warm daylight and long clear sightlines
-// (a desert has nothing to hide behind, unlike a jungle canopy or ocean
-// fog), cacti as solid circular obstacles, decorative sun-bleached rocks,
-// and tumbleweeds rolling across the sand (the desert's answer to NYC's
-// taxis / ocean's fish).
-function buildDesertWorldOnce(){
-  if(DESERT)return;
-  const {THREE}=TD;
-  const scene=new THREE.Scene();
-  scene.background=new THREE.Color(0xd9a85c);
-  scene.fog=new THREE.FogExp2(0xd9a85c,0.0016);
-  scene.add(new THREE.HemisphereLight(0xfff0c0,0x8a6828,2.0));
-  scene.add(new THREE.AmbientLight(0x6a4a1a,1.1));
-  const sun=new THREE.DirectionalLight(0xfff4d0,1.6);
-  sun.position.set(300,700,-200);
-  scene.add(sun);
-
-  DESERT={scene,offX:WW/2,offY:WH/2,obstacles:[],tumbleweeds:[],camInit:false};
-
-  function sandTexture(){
-    const c=document.createElement('canvas');c.width=128;c.height=128;
-    const g=c.getContext('2d');
-    g.fillStyle='#c89858';g.fillRect(0,0,128,128);
-    const patches=['#b8863f','#d4a868','#a87830','#e0b878'];
-    for(let i=0;i<220;i++){
-      const x=Math.random()*128,y=Math.random()*128,r=1.5+Math.random()*9;
-      g.fillStyle=patches[i%patches.length];g.globalAlpha=0.3+Math.random()*0.3;
-      g.beginPath();g.arc(x,y,r,0,Math.PI*2);g.fill();
-    }
-    g.globalAlpha=1;
-    const tex=new THREE.CanvasTexture(c);
-    tex.wrapS=tex.wrapT=THREE.RepeatWrapping;tex.repeat.set(WW/128,WH/128);
-    return tex;
-  }
-  const ground=new THREE.Mesh(new THREE.PlaneGeometry(WW,WH),new THREE.MeshStandardMaterial({map:sandTexture(),roughness:1}));
-  ground.rotation.x=-Math.PI/2;
-  scene.add(ground);
-
-  // Low, wide dunes — decorative only, gentle rolling silhouette on the
-  // horizon rather than a hazard.
-  const duneGeo=new THREE.SphereGeometry(1,10,6);
-  for(let i=0;i<40;i++){
-    const dx=rnd(100,WW-100), dz=rnd(100,WH-100);
-    const dr=rnd(40,90);
-    const dune=new THREE.Mesh(duneGeo,new THREE.MeshStandardMaterial({color:0xc89858,roughness:1}));
-    dune.scale.set(dr,dr*0.22,dr);
-    dune.position.set(dx-DESERT.offX,-dr*0.12,dz-DESERT.offY);
-    scene.add(dune);
-  }
-
-  // Cacti: solid circular obstacles — trunk + one or two curved arms.
-  const trunkGeo=new THREE.CylinderGeometry(1,1.15,1,8);
-  const cactusColors=[0x3a7a2a,0x2f6a22,0x458a34];
-  const cactusRoot=new THREE.Group();
-  scene.add(cactusRoot);
-  const NUM_CACTI=110;
-  for(let i=0;i<NUM_CACTI;i++){
-    const cx=rnd(120,WW-120), cz=rnd(120,WH-120);
-    const trunkH=rnd(26,48), trunkR=rnd(5,8);
-    const col=cactusColors[i%cactusColors.length];
-    const mat=new THREE.MeshStandardMaterial({color:col,roughness:0.85});
-    const trunk=new THREE.Mesh(trunkGeo,mat);
-    trunk.scale.set(trunkR,trunkH,trunkR);
-    trunk.position.set(cx-DESERT.offX,trunkH/2,cz-DESERT.offY);
-    const armCount=ri(0,2);
-    for(let a=0;a<armCount;a++){
-      const armH=trunkH*rnd(0.3,0.5), armR=trunkR*0.55;
-      const arm=new THREE.Mesh(trunkGeo,mat);
-      arm.scale.set(armR,armH,armR);
-      const side=a===0?1:-1;
-      arm.position.set(side*trunkR*1.4,armH*0.15,0);
-      arm.rotation.z=side*0.5;
-      trunk.add(arm);
-    }
-    cactusRoot.add(trunk);
-    DESERT.obstacles.push({shape:'circle',x:cx,y:cz,radius:trunkR+8});
-  }
-
-  // Sun-bleached rocks — decorative only.
-  const rockGeo=new THREE.IcosahedronGeometry(1,0);
-  for(let i=0;i<50;i++){
-    const rx=rnd(100,WW-100), rz=rnd(100,WH-100);
-    const rock=new THREE.Mesh(rockGeo,new THREE.MeshStandardMaterial({color:0x9a8060,roughness:0.95}));
-    const rr=rnd(8,18);
-    rock.scale.set(rr,rr*rnd(0.6,0.9),rr);
-    rock.rotation.set(Math.random()*Math.PI,Math.random()*Math.PI,Math.random()*Math.PI);
-    rock.position.set(rx-DESERT.offX,rr*0.3,rz-DESERT.offY);
-    scene.add(rock);
-  }
-
-  // Tumbleweeds: rolling decorations that wander and spin, wrapping at the
-  // world edge like the ocean's fish.
-  function makeTumbleweed(){
-    const g=new THREE.Group();
-    const mat=new THREE.MeshStandardMaterial({color:0x8a6838,roughness:1,wireframe:true});
-    const ball=new THREE.Mesh(new THREE.IcosahedronGeometry(1,1),mat);
-    g.add(ball);
-    return g;
-  }
-  for(let i=0;i<10;i++){
-    const tw=makeTumbleweed();
-    const tx=rnd(150,WW-150), tz=rnd(150,WH-150);
-    const tr=rnd(8,14);
-    tw.scale.set(tr,tr,tr);
-    tw.position.set(tx-DESERT.offX,tr,tz-DESERT.offY);
-    tw.userData={angle:Math.random()*Math.PI*2,speed:25+Math.random()*35,turnT:Math.random()*Math.PI*2};
-    scene.add(tw);
-    DESERT.tumbleweeds.push(tw);
-  }
-
-  Object.assign(DESERT,make3DActorMeshes(THREE,scene));
-}
-
-function buildSpaceWorldOnce(){
-  if(SPACE)return;
-  const {THREE}=TD;
-  const scene=new THREE.Scene();
-  scene.background=new THREE.Color(0x030308);
-  scene.fog=new THREE.FogExp2(0x050310,0.0014);
-  scene.add(new THREE.HemisphereLight(0x241a4a,0x08060f,1.1));
-  scene.add(new THREE.AmbientLight(0x201040,0.7));
-  const starLight=new THREE.DirectionalLight(0xccddff,1.3);
-  starLight.position.set(-300,700,200);
-  scene.add(starLight);
-
-  SPACE={scene,offX:WW/2,offY:WH/2,obstacles:[],debris:[],camInit:false};
-
-  // Starfield skybox: a big inverted sphere with a canvas star texture, so
-  // there's real depth behind the play area instead of flat fog.
-  function starTexture(){
-    const c=document.createElement('canvas');c.width=512;c.height=512;
-    const g=c.getContext('2d');
-    g.fillStyle='#04040c';g.fillRect(0,0,512,512);
-    for(let i=0;i<900;i++){
-      const x=Math.random()*512,y=Math.random()*512,r=Math.random()*1.7;
-      g.globalAlpha=0.35+Math.random()*0.65;
-      g.fillStyle=Math.random()<0.15?'#aaccff':'#ffffff';
-      g.beginPath();g.arc(x,y,r,0,Math.PI*2);g.fill();
-    }
-    g.globalAlpha=1;
-    return new THREE.CanvasTexture(c);
-  }
-  const sky=new THREE.Mesh(new THREE.SphereGeometry(3000,24,16),new THREE.MeshBasicMaterial({map:starTexture(),side:THREE.BackSide,fog:false}));
-  scene.add(sky);
-
-  // Ground: a dark "void" floor with a faint starry/nebula texture so the
-  // play surface still reads clearly against the skybox rather than
-  // vanishing into it.
-  function voidTexture(){
-    const c=document.createElement('canvas');c.width=128;c.height=128;
-    const g=c.getContext('2d');
-    g.fillStyle='#07070f';g.fillRect(0,0,128,128);
-    const patches=['#0c0a18','#100c20','#080614','#120a1e'];
-    for(let i=0;i<80;i++){
-      const x=Math.random()*128,y=Math.random()*128,r=4+Math.random()*20;
-      g.fillStyle=patches[i%patches.length];g.globalAlpha=0.2+Math.random()*0.2;
-      g.beginPath();g.arc(x,y,r,0,Math.PI*2);g.fill();
-    }
-    for(let i=0;i<140;i++){
-      const x=Math.random()*128,y=Math.random()*128;
-      g.globalAlpha=0.3+Math.random()*0.5;g.fillStyle='#ffffff';
-      g.fillRect(x,y,1,1);
-    }
-    g.globalAlpha=1;
-    const tex=new THREE.CanvasTexture(c);
-    tex.wrapS=tex.wrapT=THREE.RepeatWrapping;tex.repeat.set(WW/128,WH/128);
-    return tex;
-  }
-  const ground=new THREE.Mesh(new THREE.PlaneGeometry(WW,WH),new THREE.MeshStandardMaterial({map:voidTexture(),roughness:1,emissive:0x0a0818,emissiveIntensity:0.2}));
-  ground.rotation.x=-Math.PI/2;
-  scene.add(ground);
-
-  // Distant planets — decorative only, far above and well outside the play
-  // area so they never occlude gameplay, just give the sky some scale.
-  const planetColors=[0x8866cc,0xcc6644,0x44aacc,0xaaaa44,0xcc4488];
-  for(let i=0;i<5;i++){
-    const pr=rnd(80,220);
-    const col=planetColors[i%planetColors.length];
-    const planet=new THREE.Mesh(new THREE.SphereGeometry(1,20,16),new THREE.MeshStandardMaterial({color:col,roughness:0.8,emissive:col,emissiveIntensity:0.15}));
-    planet.scale.set(pr,pr,pr);
-    const ang=rnd(0,Math.PI*2), dist=rnd(WW*0.75,WW*1.3);
-    planet.position.set(Math.cos(ang)*dist,rnd(300,900),Math.sin(ang)*dist);
-    scene.add(planet);
-  }
-
-  // Asteroids: solid circular obstacles, given a faint emissive glow so they
-  // read as rock against the dark background instead of vanishing into a
-  // black silhouette.
-  const astGeo=new THREE.IcosahedronGeometry(1,1);
-  const astColors=[0x6a5a7a,0x5a4a6a,0x7a6a8a];
-  const NUM_AST=90;
-  for(let i=0;i<NUM_AST;i++){
-    const ax=rnd(120,WW-120), az=rnd(120,WH-120);
-    const ar=rnd(14,32);
-    const col=astColors[i%astColors.length];
-    const ast=new THREE.Mesh(astGeo,new THREE.MeshStandardMaterial({color:col,roughness:0.9,emissive:col,emissiveIntensity:0.18}));
-    ast.scale.set(ar,ar*rnd(0.7,1),ar*rnd(0.8,1.1));
-    ast.rotation.set(Math.random()*Math.PI,Math.random()*Math.PI,Math.random()*Math.PI);
-    ast.position.set(ax-SPACE.offX,ar*0.5,az-SPACE.offY);
-    scene.add(ast);
-    SPACE.obstacles.push({shape:'circle',x:ax,y:az,radius:ar+6});
-  }
-
-  // Drifting debris: small glowing shards wandering and slowly spinning,
-  // wrapping at the world edge like the ocean's fish / desert's tumbleweeds.
-  const debrisGeo=new THREE.OctahedronGeometry(1,0);
-  for(let i=0;i<14;i++){
-    const debMat=new THREE.MeshStandardMaterial({color:0x88ccff,emissive:0x4488cc,emissiveIntensity:0.7,roughness:0.4});
-    const deb=new THREE.Mesh(debrisGeo,debMat);
-    const dr=rnd(4,9);
-    deb.scale.set(dr,dr,dr);
-    const dx=rnd(150,WW-150), dz=rnd(150,WH-150);
-    deb.position.set(dx-SPACE.offX,rnd(20,80),dz-SPACE.offY);
-    deb.userData={angle:Math.random()*Math.PI*2,speed:15+Math.random()*20,turnT:Math.random()*Math.PI*2};
-    scene.add(deb);
-    SPACE.debris.push(deb);
-  }
-
-  Object.assign(SPACE,make3DActorMeshes(THREE,scene));
-}
-
-function buildSnowWorldOnce(){
-  if(SNOW)return;
-  const {THREE}=TD;
-  const scene=new THREE.Scene();
-  scene.background=new THREE.Color(0xc8dce8);
-  scene.fog=new THREE.FogExp2(0xd0e4f0,0.0015);
-  scene.add(new THREE.HemisphereLight(0xe8f4ff,0xb8c8d8,2.2));
-  scene.add(new THREE.AmbientLight(0xa8c0d8,1.3));
-  const sun=new THREE.DirectionalLight(0xffffff,1.7);
-  sun.position.set(-250,700,300);
-  scene.add(sun);
-
-  SNOW={scene,offX:WW/2,offY:WH/2,obstacles:[],snowballs:[],camInit:false};
-
-  function snowTexture(){
-    const c=document.createElement('canvas');c.width=128;c.height=128;
-    const g=c.getContext('2d');
-    g.fillStyle='#e8f2fa';g.fillRect(0,0,128,128);
-    const patches=['#d0e0ec','#c0d4e4','#e4eef6','#b8ccdc'];
-    for(let i=0;i<160;i++){
-      const x=Math.random()*128,y=Math.random()*128,r=2+Math.random()*14;
-      g.fillStyle=patches[i%patches.length];g.globalAlpha=0.25+Math.random()*0.3;
-      g.beginPath();g.arc(x,y,r,0,Math.PI*2);g.fill();
-    }
-    g.globalAlpha=1;
-    const tex=new THREE.CanvasTexture(c);
-    tex.wrapS=tex.wrapT=THREE.RepeatWrapping;tex.repeat.set(WW/128,WH/128);
-    return tex;
-  }
-  const ground=new THREE.Mesh(new THREE.PlaneGeometry(WW,WH),new THREE.MeshStandardMaterial({map:snowTexture(),roughness:0.85}));
-  ground.rotation.x=-Math.PI/2;
-  scene.add(ground);
-
-  // Low snow drifts — decorative only, a gentle rolling horizon like the
-  // desert's dunes.
-  const driftGeo=new THREE.SphereGeometry(1,10,6);
-  for(let i=0;i<40;i++){
-    const dx=rnd(100,WW-100), dz=rnd(100,WH-100);
-    const dr=rnd(35,80);
-    const drift=new THREE.Mesh(driftGeo,new THREE.MeshStandardMaterial({color:0xe8f2fa,roughness:0.9}));
-    drift.scale.set(dr,dr*0.2,dr);
-    drift.position.set(dx-SNOW.offX,-dr*0.12,dz-SNOW.offY);
-    scene.add(drift);
-  }
-
-  // Frost-covered pine trees: solid circular obstacles — a tapered trunk
-  // with three stacked snow-capped conical tiers.
-  const trunkGeo=new THREE.CylinderGeometry(1.2,1.6,1,8);
-  const tierGeo=new THREE.ConeGeometry(1,1,9);
-  const capGeo=new THREE.ConeGeometry(1,1,9);
-  const pineRoot=new THREE.Group();
-  scene.add(pineRoot);
-  const NUM_PINES=110;
-  for(let i=0;i<NUM_PINES;i++){
-    const tx=rnd(120,WW-120), tz=rnd(120,WH-120);
-    const trunkH=rnd(14,22), trunkR=rnd(3,4.5);
-    const treeH=rnd(50,80);
-    const tree=new THREE.Group();
-    tree.position.set(tx-SNOW.offX,0,tz-SNOW.offY);
-    const trunkMat=new THREE.MeshStandardMaterial({color:0x3a2a1a,roughness:0.9});
-    const trunk=new THREE.Mesh(trunkGeo,trunkMat);
-    trunk.scale.set(trunkR,trunkH,trunkR);
-    trunk.position.y=trunkH/2;
-    tree.add(trunk);
-    const foliageMat=new THREE.MeshStandardMaterial({color:0x1a4a3a,roughness:0.8});
-    const snowMat=new THREE.MeshStandardMaterial({color:0xf0f8ff,roughness:0.7});
-    const tiers=3;
-    for(let t=0;t<tiers;t++){
-      const tierR=(trunkR*3.2)*(1-t*0.24), tierH=treeH*0.42;
-      const tierY=trunkH+t*(treeH*0.3);
-      const tier=new THREE.Mesh(tierGeo,foliageMat);
-      tier.scale.set(tierR,tierH,tierR);
-      tier.position.y=tierY+tierH/2;
-      tree.add(tier);
-      const cap=new THREE.Mesh(capGeo,snowMat);
-      cap.scale.set(tierR*0.75,tierH*0.32,tierR*0.75);
-      cap.position.y=tierY+tierH*0.86;
-      tree.add(cap);
-    }
-    pineRoot.add(tree);
-    SNOW.obstacles.push({shape:'circle',x:tx,y:tz,radius:trunkR*3.2+8});
-  }
-
-  // Ice boulders — decorative only, pale blue-white with a faint glassy
-  // glow so they read against the snow instead of vanishing into it.
-  const iceGeo=new THREE.IcosahedronGeometry(1,0);
-  for(let i=0;i<50;i++){
-    const ix=rnd(100,WW-100), iz=rnd(100,WH-100);
-    const ir=rnd(8,20);
-    const ice=new THREE.Mesh(iceGeo,new THREE.MeshStandardMaterial({color:0xbde0f0,roughness:0.3,emissive:0x6ab0d8,emissiveIntensity:0.15}));
-    ice.scale.set(ir,ir*rnd(0.7,1.1),ir);
-    ice.rotation.set(Math.random()*Math.PI,Math.random()*Math.PI,Math.random()*Math.PI);
-    ice.position.set(ix-SNOW.offX,ir*0.3,iz-SNOW.offY);
-    scene.add(ice);
-  }
-
-  // Rolling snowballs: decorative wanderers that drift and spin, wrapping at
-  // the world edge like the desert's tumbleweeds / space's debris.
-  const ballGeo=new THREE.IcosahedronGeometry(1,1);
-  for(let i=0;i<10;i++){
-    const ball=new THREE.Mesh(ballGeo,new THREE.MeshStandardMaterial({color:0xf4faff,roughness:0.6}));
-    const bx=rnd(150,WW-150), bz=rnd(150,WH-150);
-    const br=rnd(7,13);
-    ball.scale.set(br,br,br);
-    ball.position.set(bx-SNOW.offX,br,bz-SNOW.offY);
-    ball.userData={angle:Math.random()*Math.PI*2,speed:20+Math.random()*28,turnT:Math.random()*Math.PI*2};
-    scene.add(ball);
-    SNOW.snowballs.push(ball);
-  }
-
-  Object.assign(SNOW,make3DActorMeshes(THREE,scene));
-}
-
-function show3D(){
-  document.getElementById('gc').style.display='none';
-  document.getElementById('gc3d').style.display='block';
-}
-function hide3D(){
-  document.getElementById('gc3d').style.display='none';
-  document.getElementById('gc').style.display='block';
-}
-
-function render3DFrame(now,dt){
-  const st=get3D(currentBiome.id);
-  if(!st)return;
-  const {THREE,renderer,camera}=TD;
-  if(innerWidth!==TD.lastW||innerHeight!==TD.lastH){
-    TD.lastW=innerWidth;TD.lastH=innerHeight;
-    camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
-    renderer.setSize(innerWidth,innerHeight);
-  }
-
-  // NYC-only decoration: taxis cruise their street forever, wrapping at the
-  // world edge.
-  if(currentBiome.id==='nyc'){
-    const half=WW/2;
-    for(const t of st.taxis){
-      const d=t.userData;
-      if(d.horizontal){
-        t.position.x+=d.dir*d.speed*dt;
-        if(t.position.x>half+20)t.position.x=-half-20;
-        if(t.position.x<-half-20)t.position.x=half+20;
-      }else{
-        t.position.z+=d.dir*d.speed*dt;
-        if(t.position.z>half+20)t.position.z=-half-20;
-        if(t.position.z<-half-20)t.position.z=half+20;
-      }
-    }
-  }
-
-  // Ocean-only decoration: fish drift in loose wandering paths, gently
-  // steering rather than following a fixed street.
-  if(currentBiome.id==='ocean'){
-    const half=WW/2;
-    for(const f of st.fish){
-      const d=f.userData;
-      d.turnT+=dt;
-      d.angle+=Math.sin(d.turnT*0.6)*dt*0.8;
-      f.position.x+=Math.cos(d.angle)*d.speed*dt;
-      f.position.z+=Math.sin(d.angle)*d.speed*dt;
-      f.rotation.y=Math.PI/2-d.angle;
-      if(f.position.x>half)f.position.x=-half;
-      if(f.position.x<-half)f.position.x=half;
-      if(f.position.z>half)f.position.z=-half;
-      if(f.position.z<-half)f.position.z=half;
-    }
-  }
-
-  // Desert-only decoration: tumbleweeds roll and spin as they wander.
-  if(currentBiome.id==='desert'){
-    const half=WW/2;
-    for(const tw of st.tumbleweeds){
-      const d=tw.userData;
-      d.turnT+=dt;
-      d.angle+=Math.sin(d.turnT*0.5)*dt*0.6;
-      tw.position.x+=Math.cos(d.angle)*d.speed*dt;
-      tw.position.z+=Math.sin(d.angle)*d.speed*dt;
-      tw.rotation.x+=d.speed*dt*0.05;
-      tw.rotation.z+=d.speed*dt*0.03;
-      if(tw.position.x>half)tw.position.x=-half;
-      if(tw.position.x<-half)tw.position.x=half;
-      if(tw.position.z>half)tw.position.z=-half;
-      if(tw.position.z<-half)tw.position.z=half;
-    }
-  }
-
-  // Space-only decoration: glowing debris shards drift and tumble slowly.
-  if(currentBiome.id==='space'){
-    const half=WW/2;
-    for(const d of st.debris){
-      const u=d.userData;
-      u.turnT+=dt;
-      u.angle+=Math.sin(u.turnT*0.4)*dt*0.5;
-      d.position.x+=Math.cos(u.angle)*u.speed*dt;
-      d.position.z+=Math.sin(u.angle)*u.speed*dt;
-      d.rotation.x+=dt*0.6;
-      d.rotation.y+=dt*0.4;
-      if(d.position.x>half)d.position.x=-half;
-      if(d.position.x<-half)d.position.x=half;
-      if(d.position.z>half)d.position.z=-half;
-      if(d.position.z<-half)d.position.z=half;
-    }
-  }
-
-  // Snow-only decoration: snowballs roll and spin as they wander.
-  if(currentBiome.id==='snow'){
-    const half=WW/2;
-    for(const b of st.snowballs){
-      const u=b.userData;
-      u.turnT+=dt;
-      u.angle+=Math.sin(u.turnT*0.5)*dt*0.6;
-      b.position.x+=Math.cos(u.angle)*u.speed*dt;
-      b.position.z+=Math.sin(u.angle)*u.speed*dt;
-      b.rotation.x+=u.speed*dt*0.05;
-      b.rotation.z+=u.speed*dt*0.03;
-      if(b.position.x>half)b.position.x=-half;
-      if(b.position.x<-half)b.position.x=half;
-      if(b.position.z>half)b.position.z=-half;
-      if(b.position.z<-half)b.position.z=half;
-    }
-  }
-
-  // Snake bodies -> one continuous flat ribbon mesh per snake (player + AI),
-  // a real triangle strip through the live segment positions instead of a
-  // chain of separate beads — the classic top-down 2D snake silhouette.
-  // Capped at MAX_PTS/BODY_POOL per pool sizing so both stay bounded.
-  const col=new THREE.Color();
-  let bi=0;
-  const allSnakes=[player,...aiSnakes].filter(s=>s&&s.alive);
-  for(const s of allSnakes){
-    if(bi>=st.bodyPool.length)break;
-    const mesh=st.bodyPool[bi++];
-    const n=Math.min(s.segs.length,40);
-    if(n<2){mesh.visible=false;continue;}
-    const rad=s.rad;
-    const posAttr=mesh.geometry.attributes.position;
-    const arr=posAttr.array;
-    const uvAttr=mesh.geometry.attributes.uv;
-    const uvArr=uvAttr.array;
-    const RING_SPACING=rad*0.9;
-    // Taper the last few points down toward a point instead of ending in a
-    // hard flat cut — a constant-width ribbon just stops dead at the tail,
-    // which reads as "clipped off" rather than a natural tapering tip.
-    const taperPts=Math.min(5,n-1);
-    let cum=0;
-    for(let k=0;k<n;k++){
-      const seg=s.segs[k];
-      const px=seg.x-st.offX, pz=seg.y-st.offY;
-      // Perpendicular (right) direction at this point, from the direction
-      // of travel to the next point (or from the previous point, at the
-      // tail) — offsetting left/right by that gives the ribbon's two edges.
-      let dx,dz;
-      if(k<n-1){dx=s.segs[k+1].x-seg.x;dz=s.segs[k+1].y-seg.y;}
-      else{dx=seg.x-s.segs[k-1].x;dz=seg.y-s.segs[k-1].y;}
-      const dl=Math.hypot(dx,dz)||1;
-      const rx=-dz/dl, rz=dx/dl;
-      let localRad=rad;
-      if(taperPts>0&&k>=n-taperPts){
-        const t=(n-1-k)/taperPts;
-        localRad=rad*Math.max(0.15,t);
-      }
-      const y=rad*0.8;
-      const centerRaise=localRad*0.7;
-      arr[k*9+0]=px+rx*localRad; arr[k*9+1]=y; arr[k*9+2]=pz+rz*localRad;
-      arr[k*9+3]=px; arr[k*9+4]=y+centerRaise; arr[k*9+5]=pz;
-      arr[k*9+6]=px-rx*localRad; arr[k*9+7]=y; arr[k*9+8]=pz-rz*localRad;
-      // Arc-length-based V coordinate (not just k/n) so the ring/scale
-      // pattern's real-world spacing stays constant regardless of how long
-      // the snake is, instead of stretching or compressing to fit.
-      if(k>0){
-        const prev=s.segs[k-1];
-        cum+=Math.hypot(seg.x-prev.x,seg.y-prev.y);
-      }
-      const v=cum/RING_SPACING;
-      uvArr[k*6+0]=0; uvArr[k*6+1]=v;
-      uvArr[k*6+2]=0.5; uvArr[k*6+3]=v;
-      uvArr[k*6+4]=1; uvArr[k*6+5]=v;
-    }
-    posAttr.needsUpdate=true;
-    uvAttr.needsUpdate=true;
-    mesh.geometry.setDrawRange(0,(n-1)*12);
-    mesh.geometry.computeVertexNormals();
-    mesh.geometry.computeBoundingSphere();
-    mesh.visible=true;
-    col.set(s.col);
-    // Camouflage used to be a ctx.globalAlpha fade drawn on the 2D canvas
-    // only — invisible in 3D, so the ability looked completely dead here.
-    // Dim the body toward black instead to mirror that fade.
-    if(s.hideOn)col.multiplyScalar(0.32);
-    mesh.material.color.copy(col);
-  }
-  for(;bi<st.bodyPool.length;bi++)st.bodyPool[bi].visible=false;
-
-  let pi=0;
-  for(const p of preyItems){
-    if(pi>=st.preyPool.length)break;
-    const sprite=st.preyPool[pi++];
-    sprite.visible=true;
-    sprite.material.map=getEmojiTexture(THREE,p.e);
-    sprite.material.color.set(p.scared?0xff8844:0xffffff);
-    sprite.material.needsUpdate=true;
-    const size=p.r*2.4;
-    sprite.scale.set(size,size,1);
-    sprite.position.set(p.x-st.offX,p.r*1.3,p.y-st.offY);
-  }
-  for(;pi<st.preyPool.length;pi++)st.preyPool[pi].visible=false;
-
-  // Real head meshes on top of the instanced body, oriented to face each
-  // snake's current heading.
-  let hi=0;
-  for(const s of allSnakes){
-    if(hi>=st.headPool.length)break;
-    const hp=st.headPool[hi++];
-    const rad=s.rad;
-    hp.group.visible=true;
-    // A real snake's head reads as distinctly wider than its neck — scale
-    // it up beyond the first body segment's radius rather than matching it.
-    const headScale=rad*1.3;
-    hp.group.position.set(s.head.x-st.offX,rad*0.8,s.head.y-st.offY);
-    hp.group.scale.set(headScale,headScale,headScale);
-    hp.group.rotation.y=Math.PI/2-s.angle;
-    // The 2D game's only feedback for boost/crush/venom-or-other-special was
-    // a burst of ctx-drawn particles — also invisible in 3D, so all four
-    // ability buttons looked unresponsive here even though boost/crush/venom
-    // still work mechanically (speed, collision force, damage-over-time).
-    // Give each an emissive glow on the head so pressing them reads clearly.
-    if(s.hideOn){
-      hp.mat.color.set(s.col).multiplyScalar(0.32);
-      hp.mat.emissiveIntensity=0;
-    }else{
-      hp.mat.color.set(s.col).offsetHSL(0,0,0.18);
-      if(s.boostOn){hp.mat.emissive.set(0xffee44);hp.mat.emissiveIntensity=0.55;}
-      else if(s.crushOn){hp.mat.emissive.set(0xff4422);hp.mat.emissiveIntensity=0.65;}
-      else if(s.ab.special.on){hp.mat.emissive.set(ABILITIES[s.specialAb].color);hp.mat.emissiveIntensity=0.6;}
-      else hp.mat.emissiveIntensity=0;
-    }
-  }
-  for(;hi<st.headPool.length;hi++)st.headPool[hi].group.visible=false;
-
-  // Chase camera: behind and well above the player. A shallow angle looks
-  // straight down the snake's own body axis when it's moving in a straight
-  // line — the whole body foreshortens into a single blob behind the head
-  // (exactly the "doesn't look like a snake" bug reported from a real
-  // device). A steep, more top-down-ish angle instead looks *down onto* the
-  // winding body, and as a side benefit sits well clear of nearby
-  // trees/buildings instead of grazing them.
-  if(player&&player.alive){
-    const hx=player.head.x-st.offX, hz=player.head.y-st.offY;
-    const ang=player.angle;
-    const dist=270+player.rad*5.5, height=520+player.rad*11;
-    const desiredX=hx-Math.cos(ang)*dist, desiredZ=hz-Math.sin(ang)*dist, desiredY=height;
-    if(!st.camInit){
-      camera.position.set(desiredX,desiredY,desiredZ);
-      st.camInit=true;
-    }else{
-      camera.position.x=lp(camera.position.x,desiredX,.08);
-      camera.position.y=lp(camera.position.y,desiredY,.08);
-      camera.position.z=lp(camera.position.z,desiredZ,.08);
-    }
-    const lookX=hx+Math.cos(ang)*20, lookZ=hz+Math.sin(ang)*20;
-    camera.lookAt(lookX,8,lookZ);
-  }
-
-  renderer.render(st.scene,camera);
-}
-
-// Obstacle collision shared by every 3D biome: pushes a snake's proposed next
-// head position (nh) back out of any overlapping obstacle — a rectangle
-// (NYC buildings) or a circle (jungle tree trunks) — like a wall.
-function resolve3DCollision(snake,nh,now){
-  const st=get3D(currentBiome.id);
-  if(!st)return;
-  for(const r of st.obstacles){
-    if(r.shape==='circle'){
-      const dx=nh.x-r.x, dy=nh.y-r.y, dist=Math.hypot(dx,dy);
-      if(dist>=r.radius||dist<0.0001)continue;
-      const nx=dx/dist, ny=dy/dist;
-      nh.x=r.x+nx*r.radius; nh.y=r.y+ny*r.radius;
-      snake.vx*=-0.4; snake.vy*=-0.4;
-    }else{
-      const dx=nh.x-r.x, dy=nh.y-r.y;
-      if(Math.abs(dx)>r.hw||Math.abs(dy)>r.hd)continue;
-      const pushX=r.hw-Math.abs(dx), pushY=r.hd-Math.abs(dy);
-      if(pushX<pushY) nh.x=r.x+(dx<0?-r.hw:r.hw);
-      else nh.y=r.y+(dy<0?-r.hd:r.hd);
-      snake.vx*=-0.4; snake.vy*=-0.4;
-    }
-    // Free-roam movement (unlike a car) means grazing an obstacle's edge is
-    // normal, not a rare event — deal impact damage at most once per 500ms
-    // instead of every single frame while the head rests against it, or a
-    // graze deletes the player's HP bar in a couple of seconds.
-    if(snake.isP&&now>=(snake._3dHitCd||0)){
-      snake.hp-=6;
-      shakeAmt=Math.max(shakeAmt,4);
-      snake._3dHitCd=now+500;
-    }
-    break; // one obstacle per frame is enough to unstick the head
-  }
+  biomeOrder=[0,...rest];
 }
 
 // ═══════════════════════════════════════════
 // SNAKE FORMS (evolve with level)
 // ═══════════════════════════════════════════
-// Each evolution tier also carries a distinct snake body color — starting
-// from the classic mint-green look, then progressing through metal/gem
-// tiers (silver, bronze, gold, diamond) as the player levels up in-match.
 const SNAKE_FORMS=[
-  {minLv:1,  name:'Anaconda',    headScale:1.45, eyeStyle:'normal',  twoHeads:false, colMult:1.0,  glowCol:'#00ffaa', col:'#00ffaa', darkCol:'#003322'},
-  {minLv:3,  name:'Giant Boa',   headScale:1.55, eyeStyle:'normal',  twoHeads:false, colMult:1.1,  glowCol:'#44ff44', col:'#d0d4dc', darkCol:'#2a2c30'},
-  {minLv:5,  name:'Cobra',       headScale:1.55, eyeStyle:'cobra',   twoHeads:false, colMult:1.2,  glowCol:'#ffcc00', col:'#cd7f32', darkCol:'#291a0a'},
-  {minLv:7,  name:'King Cobra',  headScale:1.65, eyeStyle:'cobra',   twoHeads:false, colMult:1.3,  glowCol:'#ff8800', col:'#ffd700', darkCol:'#332b00'},
-  {minLv:9,  name:'Twin Cobra',  headScale:1.75, eyeStyle:'cobra',   twoHeads:true,  colMult:1.4,  glowCol:'#ff2200', col:'#b9f2ff', darkCol:'#253033'},
+  {minLv:1,  name:'Anaconda',    headScale:1.45, eyeStyle:'normal',  twoHeads:false, colMult:1.0,  glowCol:'#00ffaa'},
+  {minLv:3,  name:'Giant Boa',   headScale:1.55, eyeStyle:'normal',  twoHeads:false, colMult:1.1,  glowCol:'#44ff44'},
+  {minLv:5,  name:'Cobra',       headScale:1.55, eyeStyle:'cobra',   twoHeads:false, colMult:1.2,  glowCol:'#ffcc00'},
+  {minLv:7,  name:'King Cobra',  headScale:1.65, eyeStyle:'cobra',   twoHeads:false, colMult:1.3,  glowCol:'#ff8800'},
+  {minLv:9,  name:'Twin Cobra',  headScale:1.75, eyeStyle:'cobra',   twoHeads:true,  colMult:1.4,  glowCol:'#ff2200'},
 ];
 
 function getSnakeForm(lv){
@@ -2800,30 +1571,6 @@ function drawWorld(cx,cy,zm,now){
       ctx.beginPath();ctx.arc(lx,ly,lr,0,Math.PI*2);ctx.fillStyle=lg2;ctx.fill();
     }
   }
-  // Snow: falling snowflakes
-  if(currentBiome.id==='snow'){
-    ctx.fillStyle='#ffffff';
-    for(let s=0;s<90;s++){
-      const sx2=((s*181+now*.03)%W2+W2)%W2;
-      const sy2=((s*97+now*.06)%H2+H2)%H2;
-      const sr2=s%4===0?1.6:.9;
-      ctx.globalAlpha=.3+Math.sin(now*.002+s)*.2;
-      ctx.beginPath();ctx.arc(sx2,sy2,sr2,0,Math.PI*2);ctx.fill();
-    }
-    ctx.globalAlpha=1;
-  }
-  // Cave: glowing crystal glints
-  if(currentBiome.id==='cave'){
-    for(let li=0;li<6;li++){
-      const lx=((li*W2/6)+(Math.sin(now*.0007+li)*40));
-      const ly=((li*H2/6)+(Math.cos(now*.0009+li)*40));
-      const lr=rnd(25,70)*zm;
-      const lg2=ctx.createRadialGradient(lx,ly,0,lx,ly,lr);
-      lg2.addColorStop(0,`rgba(140,80,255,${.05+Math.sin(now*.002+li)*.03})`);
-      lg2.addColorStop(1,'rgba(0,0,0,0)');
-      ctx.beginPath();ctx.arc(lx,ly,lr,0,Math.PI*2);ctx.fillStyle=lg2;ctx.fill();
-    }
-  }
 
   // Ground texture
   if(groundCanvas){
@@ -3193,7 +1940,6 @@ class Snake{
     if(nh.x>WW-30){nh.x=WW-30;this.vx=-Math.abs(this.vx);this.ta=Math.PI;}
     if(nh.y<30){nh.y=30;this.vy=Math.abs(this.vy);this.ta=Math.PI/2;}
     if(nh.y>WH-30){nh.y=WH-30;this.vy=-Math.abs(this.vy);this.ta=-Math.PI/2;}
-    if(THREED_BIOMES.has(currentBiome.id)&&get3D(currentBiome.id))resolve3DCollision(this,nh,now);
     this.vx*=this.fr;this.vy*=this.fr;
 
     this.segs.unshift(nh);
@@ -3688,12 +2434,6 @@ function checkInGameLevel(){
     applyLevelReward(inGameLevel);
     showLevelUp(inGameLevel);
     snd('kill'); // fanfare
-    // Snake body color follows the new evolution tier (mint -> silver ->
-    // bronze -> gold -> diamond) so leveling up is visibly rewarding.
-    if(player){
-      const form=getSnakeForm(inGameLevel);
-      player.col=form.col;player.darkCol=form.darkCol;
-    }
   }
 }
 
@@ -3824,19 +2564,9 @@ function switchBiome(biomeIdx){
   document.getElementById('biomeTransForm').textContent=form.name!==lastAnnouncedForm?'🐍 '+form.name+' FORM UNLOCKED':'';
   lastAnnouncedForm=form.name;
   overlay.style.display='flex';
-  // Kick the (lazy, one-time) 3D asset load off now so it has the whole
-  // transition overlay to finish loading in before it's actually shown.
-  if(THREED_BIOMES.has(currentBiome.id))ensure3D().then(()=>build3DBiome(currentBiome.id));
   // Rebuild world with new biome
   setTimeout(()=>{
-    if(THREED_BIOMES.has(currentBiome.id)){
-      const st=get3D(currentBiome.id);
-      if(st)st.camInit=false;
-      show3D();
-    }else{
-      hide3D();
-      buildWorld();
-    }
+    buildWorld();
     preyItems=[];
     spawnPrey(PREY_COUNT);
     overlay.style.display='none';
@@ -3864,27 +2594,6 @@ function initGame(){
   zonePhase=0;zoneTimer=ZONE_INTERVAL;zoneRadius=WW*.48;
   zoneCenterX=WW/2;zoneCenterY=WH/2;
   shuffleBiomeOrder();
-  // A match always opens on jungle (biomeOrder[0]===0), but currentBiome
-  // otherwise only changes via switchBiome() — without this reset, starting
-  // a new match right after one that ended mid-NYC (or any non-jungle biome)
-  // would leave the 3D canvas/city state active for a match that expects the
-  // 2D jungle opening.
-  currentBiome=BIOMES[0];
-  if(THREED_BIOMES.has(currentBiome.id)){
-    // Jungle (biome 0) is now 3D too, but a match's opening biome has no
-    // covering transition overlay like later switchBiome() calls do — so
-    // buildWorld() below still runs unconditionally and shows the familiar
-    // 2D jungle immediately, and this swaps over to 3D once it's ready
-    // (one-time cost; cached for the rest of the session after that).
-    ensure3D().then(()=>{
-      build3DBiome(currentBiome.id);
-      const st=get3D(currentBiome.id);
-      if(st)st.camInit=false;
-      show3D();
-    });
-  }else if(TD){
-    hide3D();
-  }
 
   // Escalating difficulty + more opponents as the account (meta) level climbs
   AI_DIFF=getDifficultyT();
@@ -3892,14 +2601,9 @@ function initGame(){
 
   buildWorld();
 
-  // Player — snake color reflects the current evolution tier (form), not
-  // the account rank; it starts at the base mint-green look and changes
-  // through silver/bronze/gold/diamond as the player levels up in-match
-  // (see checkInGameLevel). The account rank tier still picks the AI color
-  // pool below and the menu avatar border, just not the player's own color.
+  // Player — snake color reflects the account's current rank tier
   const rankTier=getRankTier(stats.level||1);
-  const startForm=getSnakeForm(1);
-  player=new Snake(WW/2,WH/2,{h:startForm.col,d:startForm.darkCol},true,'YOU',selectedAbility);
+  player=new Snake(WW/2,WH/2,SNAKE_COLORS[rankTier.colorIdx],true,'YOU',selectedAbility);
   // Update ability icon
   const ab=ABILITIES[selectedAbility];
   document.getElementById('ab-special-icon').textContent=ab.icon;
@@ -4028,50 +2732,8 @@ function loop(ts){
   // Player input
   if(player&&player.alive){
     const dx=mX-canvas.width/2,dy=mY-canvas.height/2;
-    const in3D=THREED_BIOMES.has(currentBiome.id);
-    let inputAngle=null;
-    if(joystickActive)inputAngle=joystickAngle;
-    // The mouse/stale-touch fallback below only self-corrects to a fixed
-    // absolute heading in the (non-rotating) 2D camera. In 3D it feeds a
-    // *relative* turn that's applied every single frame — and mX/mY freeze
-    // wherever a finger last touched the screen (touchmove stops firing once
-    // it lifts), so once you release the joystick this fallback can lock
-    // onto a stale, off-center point and spin the snake continuously with
-    // nobody touching anything. Only the actively-held joystick should steer
-    // in 3D; falling back to "no new input" (keep the current heading) is
-    // correct there, not stale-mouse steering.
-    else if(!in3D&&(Math.abs(dx)>5||Math.abs(dy)>5))inputAngle=Math.atan2(dy,dx);
-    if(in3D){
-      // The 2D top-down camera never rotates, so a screen angle IS the
-      // world angle. The 3D chase camera rotates to follow the snake's own
-      // heading, so that stops being true — "push right" no longer
-      // consistently turns right on screen once the view itself is turning
-      // too. Recomputing player.ta as player.angle+offset every frame (the
-      // old approach) is a runaway integrator: da=ta-angle always equals
-      // that fixed offset no matter how far the snake has already turned,
-      // so this.angle+=da*0.22 adds the SAME increment every single frame
-      // forever — a constant-rate spin for as long as any offset is held,
-      // which for a thumb on a stick is basically always (hence "spins the
-      // instant I touch it"). Instead treat the sideways deflection as a
-      // turn RATE and integrate it into the heading directly, scaled by
-      // real elapsed time and how far the stick is actually pushed, so a
-      // light nudge barely turns and centering the stick stops turning.
-      if(joystickActive&&joystickMag>0.05){
-        let rel=joystickAngle+Math.PI/2;
-        rel=Math.atan2(Math.sin(rel),Math.cos(rel));
-        // Full deflection to either side (90° off from straight) now hits
-        // max turn rate, and that rate is much higher, so holding the stick
-        // to one side pulls the snake through a tight, fast loop instead of
-        // a wide sluggish arc — closer to how a real snake can curl around
-        // on itself.
-        const norm=Math.max(-1,Math.min(1,rel/(Math.PI/2)));
-        const maxTurnRate=6.5;
-        player.angle+=norm*maxTurnRate*joystickMag*(dt/1000);
-      }
-      player.ta=player.angle;
-    }else if(inputAngle!==null){
-      player.ta=inputAngle;
-    }
+    if(joystickActive)player.ta=joystickAngle;
+    else if(Math.abs(dx)>5||Math.abs(dy)>5)player.ta=Math.atan2(dy,dx);
     if(keys['ArrowRight'])player.ta=0;if(keys['ArrowDown'])player.ta=Math.PI/2;
     if(keys['ArrowLeft'])player.ta=Math.PI;if(keys['ArrowUp'])player.ta=-Math.PI/2;
     if(keys['q']&&!keys._qu){player.actSpecial(now);keys._qu=true;}
@@ -4105,16 +2767,12 @@ function loop(ts){
 
   resize();
   const dcx=camX+shX/zoom,dcy=camY+shY/zoom;
-  if(THREED_BIOMES.has(currentBiome.id)&&get3D(currentBiome.id)){
-    render3DFrame(now,dt/1000);
-  }else{
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    drawWorld(dcx,dcy,zoom,now);
-    drPrey(dcx,dcy,zoom);
-    for(const ai of aiSnakes)if(ai.alive)ai.draw(dcx,dcy,zoom);
-    drParts(dcx,dcy,zoom);
-    if(player&&player.alive)player.draw(dcx,dcy,zoom);
-  }
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  drawWorld(dcx,dcy,zoom,now);
+  drPrey(dcx,dcy,zoom);
+  for(const ai of aiSnakes)if(ai.alive)ai.draw(dcx,dcy,zoom);
+  drParts(dcx,dcy,zoom);
+  if(player&&player.alive)player.draw(dcx,dcy,zoom);
   drawMini();
   updXPBar();
 
@@ -4130,7 +2788,7 @@ function loop(ts){
 // ═══════════════════════════════════════════
 // INPUT
 // ═══════════════════════════════════════════
-let joystickActive=false,joystickAngle=-Math.PI/2,joystickMag=0;
+let joystickActive=false,joystickAngle=0;
 window.addEventListener('mousemove',e=>{mX=e.clientX;mY=e.clientY;});
 window.addEventListener('touchmove',e=>{e.preventDefault();if(!joystickActive){mX=e.touches[0].clientX;mY=e.touches[0].clientY;}},{passive:false});
 // Right side tap = move direction (no joystick needed)
@@ -4154,9 +2812,9 @@ const joyOuter=document.getElementById('joyOuter');
 const joyInner=document.getElementById('joyInner');
 if(joyOuter){
   let joyStart={x:0,y:0};
-  joyOuter.addEventListener('touchstart',e=>{e.preventDefault();joystickActive=true;joystickMag=0;joystickAngle=-Math.PI/2;const r=joyOuter.getBoundingClientRect();joyStart={x:r.left+r.width/2,y:r.top+r.height/2};},{passive:false});
-  joyOuter.addEventListener('touchmove',e=>{e.preventDefault();const t=e.touches[0];const dx=t.clientX-joyStart.x,dy=t.clientY-joyStart.y;const dist=Math.hypot(dx,dy);const maxD=38;const cx2=Math.cos(Math.atan2(dy,dx))*Math.min(dist,maxD);const cy2=Math.sin(Math.atan2(dy,dx))*Math.min(dist,maxD);joyInner.style.left=(50+cx2/maxD*38)+'%';joyInner.style.top=(50+cy2/maxD*38)+'%';joystickAngle=Math.atan2(dy,dx);joystickMag=Math.min(dist,maxD)/maxD;},{passive:false});
-  joyOuter.addEventListener('touchend',()=>{joystickActive=false;joystickMag=0;joyInner.style.left='50%';joyInner.style.top='50%';});
+  joyOuter.addEventListener('touchstart',e=>{e.preventDefault();joystickActive=true;const r=joyOuter.getBoundingClientRect();joyStart={x:r.left+r.width/2,y:r.top+r.height/2};},{passive:false});
+  joyOuter.addEventListener('touchmove',e=>{e.preventDefault();const t=e.touches[0];const dx=t.clientX-joyStart.x,dy=t.clientY-joyStart.y;const dist=Math.hypot(dx,dy);const maxD=38;const cx2=Math.cos(Math.atan2(dy,dx))*Math.min(dist,maxD);const cy2=Math.sin(Math.atan2(dy,dx))*Math.min(dist,maxD);joyInner.style.left=(50+cx2/maxD*38)+'%';joyInner.style.top=(50+cy2/maxD*38)+'%';joystickAngle=Math.atan2(dy,dx);},{passive:false});
+  joyOuter.addEventListener('touchend',()=>{joystickActive=false;joyInner.style.left='50%';joyInner.style.top='50%';});
 }
 
 // Ability taps (mobile)
