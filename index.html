@@ -937,15 +937,6 @@ function getSnakeForm(lv){
   return form;
 }
 
-// Illustrated cobra head/hood artwork (replaces the procedural hood for cobra-tier forms)
-const cobraHeadImg=new Image();
-let cobraHeadLoaded=false;
-cobraHeadImg.onload=()=>{cobraHeadLoaded=true;};
-cobraHeadImg.src='assets/cobra-head.webp';
-// The source art's snout doesn't point along the image's own +x axis, so it
-// needs this fixed extra spin to line up with the direction of travel.
-const COBRA_ART_ROT=330*Math.PI/180;
-
 const PREY_TYPES=[
   {e:'🐇',n:'Rabbit',p:25,r:11,s:1.3,c:'#cc9966'},
   {e:'🦎',n:'Lizard',p:18,r:8,s:1.0,c:'#558822'},
@@ -2171,17 +2162,26 @@ class Snake{
 
     ctx.save();ctx.translate(hp.x,hp.y);ctx.rotate(headAng);
 
-    const useCobraArt=form.eyeStyle==='cobra'&&cobraHeadLoaded;
-    if(useCobraArt){
-      // Illustrated cobra hood/head artwork, scaled+anchored so the snout lines
-      // up with the direction of travel the same way the procedural head did.
-      if(this.venomTimer>0){ctx.filter='hue-rotate(70deg) saturate(1.5)';}
-      ctx.save();ctx.rotate(COBRA_ART_ROT);
-      const cdw=hr*2.6,cdh=cdw*(cobraHeadImg.height/cobraHeadImg.width);
-      ctx.drawImage(cobraHeadImg,-cdw/2,-cdh/2,cdw,cdh);
-      ctx.restore();
-      ctx.filter='none';
-    } else {
+    // COBRA HOOD (levels 5+) — a subtle flare behind the head, not a separate oversized blob
+    if(form.eyeStyle==='cobra'){
+      ctx.beginPath();
+      ctx.ellipse(0,0,hr*1.22,hr*.92,0,0,Math.PI*2);
+      ctx.fillStyle='rgba(0,0,0,.35)';ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(0,0,hr*1.18,hr*.88,0,0,Math.PI*2);
+      const hoodG=ctx.createRadialGradient(0,0,0,0,0,hr*1.15);
+      hoodG.addColorStop(0,lh(this.col,20));
+      hoodG.addColorStop(.6,this.col);
+      hoodG.addColorStop(1,'rgba(0,0,0,.5)');
+      ctx.fillStyle=hoodG;ctx.fill();
+      // Hood pattern
+      for(let hp2=0;hp2<3;hp2++){
+        ctx.beginPath();ctx.ellipse(0,hr*(.24+hp2*.26),hr*.42,hr*.12,0,0,Math.PI*2);
+        ctx.fillStyle='rgba(0,0,0,.2)';ctx.fill();
+      }
+      ctx.strokeStyle='rgba(0,0,0,.4)';ctx.lineWidth=zm;
+      ctx.beginPath();ctx.ellipse(0,0,hr*1.18,hr*.88,0,0,Math.PI*2);ctx.stroke();
+    }
     // Head shadow
     ctx.beginPath();ctx.ellipse(hr*.1,hr*.12,hr*1.12,hr*.82,0,0,Math.PI*2);
     ctx.fillStyle='rgba(0,0,0,.28)';ctx.fill();
@@ -2252,17 +2252,10 @@ class Snake{
       ctx.beginPath();ctx.arc(ex,ey,hr*.265,0,Math.PI*2);
       ctx.strokeStyle='rgba(0,0,0,.6)';ctx.lineWidth=zm*1.1;ctx.stroke();
     }
-    }
 
     // ── SECOND HEAD for Twin Cobra ──
     if(form.twoHeads){
       ctx.save();ctx.translate(0,-hr*1.8);ctx.scale(.75,.75);
-      if(useCobraArt){
-        ctx.save();ctx.rotate(COBRA_ART_ROT);
-        const cdw2=hr*2.6,cdh2=cdw2*(cobraHeadImg.height/cobraHeadImg.width);
-        ctx.drawImage(cobraHeadImg,-cdw2/2,-cdh2/2,cdw2,cdh2);
-        ctx.restore();
-      } else {
       // Mini head
       ctx.beginPath();ctx.moveTo(hr*.95,0);ctx.bezierCurveTo(hr*.7,-hr*.72,-hr*.4,-hr*.78,-hr*.6,0);ctx.bezierCurveTo(-hr*.4,hr*.78,hr*.7,hr*.72,hr*.95,0);ctx.closePath();
       ctx.fillStyle=this.col;ctx.fill();ctx.strokeStyle='rgba(0,0,0,.45)';ctx.lineWidth=zm*1.2;ctx.stroke();
@@ -2277,22 +2270,19 @@ class Snake{
       ctx.beginPath();ctx.moveTo(hr*.88,0);ctx.lineTo(hr*1.35,0);ctx.stroke();
       ctx.beginPath();ctx.moveTo(hr*1.35,0);ctx.lineTo(hr*1.6,-hr*.2);ctx.stroke();
       ctx.beginPath();ctx.moveTo(hr*1.35,0);ctx.lineTo(hr*1.6,hr*.2);ctx.stroke();
-      }
       ctx.restore();
     }
-    // ── TONGUE — forked red like photo (the cobra artwork already has one baked in) ──
-    if(!useCobraArt){
-      const tf=Math.sin(this.tongueT*5.5);
-      const tOut=.4+Math.abs(Math.sin(this.tongueT*2.8))*.6;
-      ctx.strokeStyle='#ff2200';
-      ctx.lineWidth=Math.max(.9,zm*1.1);ctx.lineCap='round';
-      // Base
-      ctx.beginPath();ctx.moveTo(hr*.88,0);ctx.lineTo(hr*(0.88+.55*tOut),0);ctx.stroke();
-      // Fork
-      const tx3=hr*(0.88+.55*tOut), fl=hr*.32*tOut;
-      ctx.beginPath();ctx.moveTo(tx3,0);ctx.lineTo(tx3+fl,-hr*.24);ctx.stroke();
-      ctx.beginPath();ctx.moveTo(tx3,0);ctx.lineTo(tx3+fl, hr*.24);ctx.stroke();
-    }
+    // ── TONGUE — forked red like photo ──
+    const tf=Math.sin(this.tongueT*5.5);
+    const tOut=.4+Math.abs(Math.sin(this.tongueT*2.8))*.6;
+    ctx.strokeStyle='#ff2200';
+    ctx.lineWidth=Math.max(.9,zm*1.1);ctx.lineCap='round';
+    // Base
+    ctx.beginPath();ctx.moveTo(hr*.88,0);ctx.lineTo(hr*(0.88+.55*tOut),0);ctx.stroke();
+    // Fork
+    const tx3=hr*(0.88+.55*tOut), fl=hr*.32*tOut;
+    ctx.beginPath();ctx.moveTo(tx3,0);ctx.lineTo(tx3+fl,-hr*.24);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(tx3,0);ctx.lineTo(tx3+fl, hr*.24);ctx.stroke();
 
     // ── Special ability FX on head ──
     if(this.specialAb==='lightning'&&Math.random()<.06){
